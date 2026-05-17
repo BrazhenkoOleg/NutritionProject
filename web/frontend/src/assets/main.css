@@ -1,0 +1,7 @@
+@import './base.css';
+@import './styles/app.css';
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
