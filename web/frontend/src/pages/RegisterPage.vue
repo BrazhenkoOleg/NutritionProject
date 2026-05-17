@@ -38,7 +38,7 @@ async function register() {
 <template>
   <main class="page auth-page">
     <section class="card auth-card">
-      <h1>Nutrition Project</h1>
+      <h1>NutriVision</h1>
 
       <p class="subtitle">
         Создайте аккаунт для работы с историей анализов и сохранением результатов.

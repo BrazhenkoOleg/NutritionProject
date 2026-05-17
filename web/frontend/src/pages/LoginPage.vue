@@ -20,7 +20,7 @@ async function login() {
     await authStore.login(form.value)
 
     message.value = ''
-    
+
     if (authStore.user?.profile_completed) {
         router.push('/dashboard')
     } else {
@@ -41,7 +41,7 @@ async function login() {
 <template>
   <main class="page auth-page">
     <section class="card auth-card">
-      <h1>Nutrition Project</h1>
+      <h1>NutriVision</h1>
 
       <p class="subtitle">
         Войдите в аккаунт, чтобы загружать изображения и сохранять историю анализов.

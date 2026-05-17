@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Analysis extends Model
 {
@@ -25,4 +26,9 @@ class Analysis extends Model
         'detections' => 'array',
         'products' => 'array',
     ];
+
+    public function analysisProducts(): HasMany
+    {
+        return $this->hasMany(AnalysisProduct::class);
+    }
 }

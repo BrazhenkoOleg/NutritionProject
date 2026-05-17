@@ -610,7 +610,7 @@ onMounted(async () => {
             </div>
 
             <div>
-                <h1>Nutrition Project</h1>
+                <h1>NutriVision</h1>
 
                 <p>
                 Дневник питания с распознаванием продуктов, ручной корректировкой и расчётом КБЖУ.
