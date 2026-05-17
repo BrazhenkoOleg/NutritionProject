@@ -1,9 +1,23 @@
 #!/bin/sh
 set -e
 
-echo "Проверяем Laravel public/index.php..."
-ls -la /var/www/html/public
-test -f /var/www/html/public/index.php
+echo "Подготавливаем Laravel storage..."
+
+mkdir -p storage/app/public/analyses
+mkdir -p storage/framework/cache
+mkdir -p storage/framework/sessions
+mkdir -p storage/framework/views
+mkdir -p storage/logs
+mkdir -p bootstrap/cache
+
+chown -R www-data:www-data storage bootstrap/cache
+
+echo "Создаём public storage link..."
+
+if [ ! -L public/storage ]; then
+    rm -rf public/storage
+    php artisan storage:link
+fi
 
 echo "Очищаем Laravel cache..."
 rm -rf bootstrap/cache/*.php
@@ -22,9 +36,6 @@ echo "Кэшируем production config..."
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-
-echo "Показываем маршруты..."
-php artisan route:list
 
 echo "Запуск Apache..."
 exec apache2-foreground
