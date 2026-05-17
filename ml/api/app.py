@@ -2,19 +2,16 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from collections import defaultdict
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
 
-# ===== Пути проекта =====
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 RUNS_DIR = PROJECT_ROOT / "runs"
 MODEL_PATH = RUNS_DIR / "nutrition_yolo11m_aug_v1" / "weights" / "best.pt"
 
-
-# ===== FastAPI app =====
 app = FastAPI(
     title="Nutrition YOLO API",
     description="API для распознавания продуктов питания на изображениях",
@@ -29,12 +26,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+model = None
 
-# ===== Загрузка модели =====
-if not MODEL_PATH.exists():
-    raise FileNotFoundError(f"Модель не найдена: {MODEL_PATH}")
 
-model = YOLO(str(MODEL_PATH))
+def get_model():
+    global model
+
+    if model is None:
+        if not MODEL_PATH.exists():
+            raise FileNotFoundError(f"Модель не найдена: {MODEL_PATH}")
+
+        model = YOLO(str(MODEL_PATH))
+
+    return model
 
 
 @app.get("/")
@@ -50,6 +54,8 @@ def health():
     return {
         "status": "ok",
         "model_path": str(MODEL_PATH),
+        "model_exists": MODEL_PATH.exists(),
+        "model_loaded": model is not None,
     }
 
 
@@ -62,7 +68,15 @@ async def predict(image: UploadFile = File(...)):
         temp_image_path = Path(temp_file.name)
 
     try:
-        results = model.predict(
+        try:
+            yolo_model = get_model()
+        except FileNotFoundError as error:
+            raise HTTPException(
+                status_code=500,
+                detail=str(error),
+            )
+
+        results = yolo_model.predict(
             source=str(temp_image_path),
             conf=0.25,
             iou=0.45,
