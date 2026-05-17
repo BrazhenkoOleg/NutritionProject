@@ -35,12 +35,9 @@ RUN composer dump-autoload --optimize
 
 RUN chown -R www-data:www-data storage bootstrap/cache
 
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-
-RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/!/var/www/html/public!g' /etc/apache2/apache2.conf
-
 RUN a2enmod rewrite
+
+COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
