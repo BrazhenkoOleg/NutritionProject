@@ -1,10 +1,6 @@
-ultralytics
-torch
-torchvision
-opencv-python-headless
-numpy
-Pillow
-PyYAML
 fastapi
 uvicorn[standard]
 python-multipart
+numpy
+opencv-python-headless
+onnxruntime
