@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from collections import defaultdict
+import asyncio
 import gc
 import json
 
@@ -19,6 +20,7 @@ PRODUCTS_PATH = ML_ROOT / "data" / "nutrition_products_ru_kbju_100g.json"
 IMAGE_SIZE = 640
 CONF_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.45
+MAX_FILE_SIZE = 8 * 1024 * 1024
 
 
 def load_class_names():
@@ -52,7 +54,7 @@ CLASS_NAMES = load_class_names()
 app = FastAPI(
     title="Nutrition ONNX API",
     description="API для распознавания продуктов питания на изображениях через ONNX Runtime",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -64,6 +66,7 @@ app.add_middleware(
 )
 
 session = None
+predict_lock = asyncio.Lock()
 
 
 def get_session():
@@ -71,7 +74,7 @@ def get_session():
 
     if session is None:
         if not MODEL_PATH.exists():
-            raise FileNotFoundError(f"ONNX модель не найдена: {MODEL_PATH}")
+            raise FileNotFoundError("ONNX модель не найдена")
 
         session = ort.InferenceSession(
             str(MODEL_PATH),
@@ -155,10 +158,6 @@ def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
     if predictions.ndim == 3:
         predictions = predictions[0]
 
-    # YOLO ONNX часто возвращает форму:
-    # (1, 57, 8400) или (57, 8400)
-    # Нужно привести к:
-    # (8400, 57)
     if predictions.shape[0] < predictions.shape[1]:
         predictions = predictions.T
 
@@ -169,6 +168,9 @@ def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
     for prediction in predictions:
         box = prediction[:4]
         class_scores = prediction[4:]
+
+        if len(class_scores) == 0:
+            continue
 
         class_id = int(np.argmax(class_scores))
         confidence = float(class_scores[class_id])
@@ -278,10 +280,8 @@ def health():
     return {
         "status": "ok",
         "runtime": "onnxruntime",
-        "model_path": str(MODEL_PATH),
-        "model_exists": MODEL_PATH.exists(),
-        "products_path": str(PRODUCTS_PATH),
-        "products_file_exists": PRODUCTS_PATH.exists(),
+        "model_ready": MODEL_PATH.exists(),
+        "products_ready": PRODUCTS_PATH.exists(),
         "classes_count": len(CLASS_NAMES),
         "image_size": IMAGE_SIZE,
         "model_loaded": session is not None,
@@ -290,69 +290,83 @@ def health():
 
 @app.post("/predict")
 async def predict(image: UploadFile = File(...)):
-    suffix = Path(image.filename or "").suffix or ".jpg"
+    if predict_lock.locked():
+        raise HTTPException(
+            status_code=429,
+            detail="Сервис уже обрабатывает изображение. Повторите запрос через несколько секунд.",
+        )
 
-    with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-        temp_file.write(await image.read())
-        temp_image_path = Path(temp_file.name)
+    async with predict_lock:
+        temp_image_path = None
 
-    try:
         try:
+            content = await image.read()
+
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Файл слишком большой. Загрузите изображение до 8 МБ.",
+                )
+
+            suffix = Path(image.filename or "").suffix or ".jpg"
+
+            with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file.write(content)
+                temp_image_path = Path(temp_file.name)
+
             ort_session = get_session()
-        except FileNotFoundError as error:
+
+            input_tensor, original_width, original_height, scale, pad_x, pad_y = preprocess(
+                temp_image_path,
+            )
+
+            input_name = ort_session.get_inputs()[0].name
+
+            outputs = ort_session.run(
+                None,
+                {
+                    input_name: input_tensor,
+                },
+            )
+
+            detections = postprocess(
+                outputs,
+                original_width,
+                original_height,
+                scale,
+                pad_x,
+                pad_y,
+            )
+
+            products = group_products(detections)
+
+            return {
+                "status": "ok",
+                "detections_count": len(detections),
+                "products_count": len(products),
+                "detections": detections,
+                "products": products,
+            }
+
+        except HTTPException:
+            raise
+
+        except ValueError as error:
             raise HTTPException(
-                status_code=500,
+                status_code=400,
                 detail=str(error),
             )
 
-        input_tensor, original_width, original_height, scale, pad_x, pad_y = preprocess(
-            temp_image_path,
-        )
+        except Exception as error:
+            print("Predict error:", repr(error), flush=True)
 
-        input_name = ort_session.get_inputs()[0].name
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка сервиса распознавания. Повторите попытку позже.",
+            )
 
-        outputs = ort_session.run(
-            None,
-            {
-                input_name: input_tensor,
-            },
-        )
+        finally:
+            if temp_image_path is not None and temp_image_path.exists():
+                temp_image_path.unlink()
 
-        detections = postprocess(
-            outputs,
-            original_width,
-            original_height,
-            scale,
-            pad_x,
-            pad_y,
-        )
-
-        products = group_products(detections)
-
-        return {
-            "status": "ok",
-            "detections_count": len(detections),
-            "products_count": len(products),
-            "detections": detections,
-            "products": products,
-        }
-
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error),
-        )
-
-    except Exception as error:
-        print("Predict error:", repr(error), flush=True)
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(error),
-        )
-
-    finally:
-        if temp_image_path.exists():
-            temp_image_path.unlink()
-
-        gc.collect()
+            gc.collect()

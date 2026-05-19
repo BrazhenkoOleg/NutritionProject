@@ -1,35 +1,165 @@
+<template>
+  <section class="meal-section">
+    <button
+      type="button"
+      class="meal-toggle"
+      @click="$emit('toggle', meal.value)"
+    >
+      <div class="meal-title">
+        <div class="meal-icon">
+          <IconResolver
+            :name="meal.icon"
+            :size="20"
+          />
+        </div>
+
+        <div>
+          <h3>{{ meal.label }}</h3>
+          <span>{{ meal.description }}</span>
+        </div>
+      </div>
+
+      <div class="meal-inline-totals">
+        <div class="meal-kbju-preview">
+          <div class="meal-kbju-main">
+            <strong>{{ Math.round(totals.kcal || 0) }}</strong>
+            <span>ккал</span>
+          </div>
+
+          <div>
+            <strong>{{ formatNumber(totals.protein) }}</strong>
+            <span>Б, г</span>
+          </div>
+
+          <div>
+            <strong>{{ formatNumber(totals.fat) }}</strong>
+            <span>Ж, г</span>
+          </div>
+
+          <div>
+            <strong>{{ formatNumber(totals.carbs) }}</strong>
+            <span>У, г</span>
+          </div>
+        </div>
+
+        <span class="meal-records-count">{{ analyses.length }} записей</span>
+
+        <IconResolver
+          name="ChevronDown"
+          :size="18"
+          class="chevron"
+          :class="{ rotated: !collapsed }"
+        />
+      </div>
+    </button>
+
+    <div
+      v-if="!collapsed"
+      class="meal-content"
+    >
+      <MealUploadPanel
+        :meal="meal"
+        :upload-file="uploadFile"
+        :preview-url="previewUrl"
+        :is-loading="isLoading"
+        :upload-meal-type="uploadMealType"
+        @file-change="$emit('file-change', $event, meal.value)"
+        @analyze="$emit('analyze', meal.value)"
+      />
+
+      <div class="meal-manual-actions">
+        <button
+          v-if="manualMealType !== meal.value"
+          type="button"
+          class="light-button"
+          @click="$emit('start-manual-entry', meal.value)"
+        >
+          Добавить вручную
+        </button>
+      </div>
+
+      <ProductEditor
+        v-if="manualMealType === meal.value"
+        :editable-products="manualProducts"
+        :all-products="allProducts"
+        :is-loading="isLoading"
+        @update:editable-products="$emit('update:manualProducts', $event)"
+        @save="$emit('save-manual-entry')"
+        @cancel="$emit('cancel-manual-entry')"
+      />
+
+      <div
+        v-if="analyses.length === 0"
+        class="meal-empty-state"
+      >
+        <IconResolver
+          name="Camera"
+          :size="24"
+        />
+
+        <div>
+          <strong>Пока нет записей</strong>
+          <span>Добавьте фото блюда или внесите продукты вручную.</span>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="meal-analyses-list"
+      >
+        <MealAnalysisCard
+          v-for="analysis in analyses"
+          :key="analysis.id"
+          :analysis="analysis"
+          :editing-analysis-id="editingAnalysisId"
+          :editable-products="editableProducts"
+          :all-products="allProducts"
+          :is-loading="isLoading"
+          @edit-products="$emit('edit-products', $event)"
+          @delete-analysis="$emit('delete-analysis', $event)"
+          @cancel-edit="$emit('cancel-edit')"
+          @save-edit="$emit('save-edit')"
+          @update:editable-products="$emit('update:editableProducts', $event)"
+        />
+      </div>
+    </div>
+  </section>
+</template>
+
 <script setup>
+import IconResolver from '../ui/IconResolver.vue'
 import MealUploadPanel from './MealUploadPanel.vue'
 import MealAnalysisCard from './MealAnalysisCard.vue'
 import ProductEditor from './ProductEditor.vue'
+
+function formatNumber(value) {
+  return Number(value || 0).toFixed(1)
+}
 
 defineProps({
   meal: {
     type: Object,
     required: true,
   },
-  manualMealType: {
-    type: String,
-    default: null,
-},
-    manualProducts: {
-    type: Array,
-    default: () => [],
-},
   analyses: {
     type: Array,
     default: () => [],
   },
   totals: {
     type: Object,
-    required: true,
+    default: () => ({
+      kcal: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+    }),
   },
   collapsed: {
     type: Boolean,
-    required: true,
+    default: true,
   },
   uploadFile: {
-    type: [File, Object, null],
+    type: File,
     default: null,
   },
   previewUrl: {
@@ -38,11 +168,19 @@ defineProps({
   },
   isLoading: {
     type: Boolean,
-    required: true,
+    default: false,
   },
   uploadMealType: {
     type: String,
     default: null,
+  },
+  manualMealType: {
+    type: String,
+    default: null,
+  },
+  manualProducts: {
+    type: Array,
+    default: () => [],
   },
   editingAnalysisId: {
     type: [Number, String, null],
@@ -62,140 +200,14 @@ defineEmits([
   'toggle',
   'file-change',
   'analyze',
-
   'start-manual-entry',
   'cancel-manual-entry',
   'save-manual-entry',
-
   'edit-products',
-  'manual-add-products',
+  'delete-analysis',
   'cancel-edit',
   'save-edit',
-  'delete-analysis',
-
   'update:editableProducts',
   'update:manualProducts',
 ])
-
-function formatNumber(value) {
-  if (value === null || value === undefined || value === '') {
-    return '—'
-  }
-
-  return Number(value).toFixed(2)
-}
 </script>
-
-<template>
-  <section class="meal-section">
-    <button
-      type="button"
-      class="meal-toggle"
-      @click="$emit('toggle')"
-    >
-      <div class="meal-title">
-        <span class="meal-arrow">
-          {{ collapsed ? '▸' : '▾' }}
-        </span>
-
-        <div>
-          <h3>
-            <span class="meal-name-icon">{{ meal.icon }}</span>
-            {{ meal.label }}
-          </h3>
-          <small>{{ analyses.length }} записей</small>
-        </div>
-      </div>
-
-      <div class="meal-inline-totals">
-        <span>{{ formatNumber(totals.kcal) }} ккал</span>
-        <span>Б {{ formatNumber(totals.protein) }}</span>
-        <span>Ж {{ formatNumber(totals.fat) }}</span>
-        <span>У {{ formatNumber(totals.carbs) }}</span>
-      </div>
-    </button>
-
-    <template v-if="!collapsed">
-      <MealUploadPanel
-        :meal="meal"
-        :upload-file="uploadFile"
-        :preview-url="previewUrl"
-        :is-loading="isLoading"
-        :upload-meal-type="uploadMealType"
-        @file-change="$emit('file-change', $event)"
-        @analyze="$emit('analyze')"
-      />
-
-      <div class="manual-entry-panel">
-        <div
-            v-if="manualMealType !== meal.value"
-            class="manual-entry-compact"
-        >
-            <div>
-            <strong>Нет фото?</strong>
-            <span>Добавьте продукты вручную с указанием граммовки.</span>
-            </div>
-
-            <button
-            type="button"
-            class="secondary-button"
-            @click="$emit('start-manual-entry')"
-            >
-            Добавить вручную
-            </button>
-        </div>
-
-        <div
-            v-else
-            class="manual-entry-editor"
-        >
-            <div class="manual-entry-header">
-            <div>
-                <strong>Ручная запись</strong>
-                <span>Выберите продукты и укажите массу для раздела «{{ meal.label }}»</span>
-            </div>
-            </div>
-
-            <ProductEditor
-            :editable-products="manualProducts"
-            :all-products="allProducts"
-            :is-loading="isLoading"
-            @update:editable-products="$emit('update:manualProducts', $event)"
-            @save="$emit('save-manual-entry')"
-            @cancel="$emit('cancel-manual-entry')"
-            />
-        </div>
-      </div>
-
-      <div class="meal-content">
-        <p
-          v-if="analyses.length === 0"
-          class="empty meal-empty"
-        >
-          Нет записей
-        </p>
-
-        <div
-          v-else
-          class="meal-analysis-list"
-        >
-          <MealAnalysisCard
-            v-for="analysis in analyses"
-            :key="analysis.id"
-            :analysis="analysis"
-            :editing-analysis-id="editingAnalysisId"
-            :editable-products="editableProducts"
-            :all-products="allProducts"
-            :is-loading="isLoading"
-            @edit-products="$emit('edit-products', $event)"
-            @manual-add-products="$emit('manual-add-products', $event)"
-            @cancel-edit="$emit('cancel-edit')"
-            @save-edit="$emit('save-edit')"
-            @delete-analysis="$emit('delete-analysis', $event)"
-            @update:editable-products="$emit('update:editableProducts', $event)"
-          />
-        </div>
-      </div>
-    </template>
-  </section>
-</template>

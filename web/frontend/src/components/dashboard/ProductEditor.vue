@@ -184,10 +184,11 @@ function removeProductRow(index) {
 
       <button
         type="button"
+        class="primary-button"
         :disabled="isLoading"
         @click="$emit('save')"
       >
-        Сохранить
+        {{ isLoading ? 'Сохраняем...' : 'Сохранить' }}
       </button>
 
       <button

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 import LoginPage from '../pages/LoginPage.vue'
 import RegisterPage from '../pages/RegisterPage.vue'
@@ -8,27 +9,24 @@ import ProfilePage from '../pages/ProfilePage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+
   routes: [
-    {
-      path: '/',
-      redirect: '/dashboard',
-    },
+    { path: '/', redirect: '/dashboard' },
+
     {
       path: '/login',
       name: 'login',
       component: LoginPage,
-      meta: {
-        guestOnly: true,
-      },
+      meta: { guestOnly: true },
     },
+
     {
       path: '/register',
       name: 'register',
       component: RegisterPage,
-      meta: {
-        guestOnly: true,
-      },
+      meta: { guestOnly: true },
     },
+
     {
       path: '/profile-setup',
       name: 'profile-setup',
@@ -38,14 +36,14 @@ const router = createRouter({
         profileSetup: true,
       },
     },
+
     {
       path: '/profile',
       name: 'profile',
       component: ProfilePage,
-      meta: {
-        requiresAuth: true,
-      },
+      meta: { requiresAuth: true },
     },
+
     {
       path: '/dashboard',
       name: 'dashboard',
@@ -59,14 +57,32 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const token = localStorage.getItem('auth_token')
+  const authStore = useAuthStore()
 
-  if (to.meta.requiresAuth && !token) {
+  if (authStore.token && !authStore.user) {
+    try {
+      await authStore.fetchUser()
+    } catch (error) {
+      if (to.meta.requiresAuth) {
+        return '/login'
+      }
+    }
+  }
+
+  if (to.meta.requiresAuth && !authStore.token) {
     return '/login'
   }
 
-  if (to.meta.guestOnly && token) {
-    return '/dashboard'
+  if (to.meta.guestOnly && authStore.token) {
+    if (authStore.user?.profile_completed) {
+      return '/dashboard'
+    }
+
+    return '/profile-setup'
+  }
+
+  if (to.meta.requiresProfile && authStore.user && !authStore.user.profile_completed) {
+    return '/profile-setup'
   }
 
   return true

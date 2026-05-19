@@ -2,12 +2,133 @@
 <html lang="">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NutriVision</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <style>
+        body {
+          margin: 0;
+          background: #f4f7fb;
+          font-family:
+            Inter,
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            sans-serif;
+        }
+
+        .initial-loader {
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          padding: 24px;
+          background:
+            radial-gradient(circle at 12% 10%, rgba(34, 197, 94, 0.16), transparent 34%),
+            radial-gradient(circle at 88% 18%, rgba(14, 165, 233, 0.14), transparent 32%),
+            #f4f7fb;
+        }
+
+        .initial-loader-card {
+          width: min(420px, 100%);
+          display: grid;
+          gap: 18px;
+          padding: 22px;
+          border-radius: 28px;
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid #e3e9f0;
+          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.08);
+        }
+
+        .initial-loader-brand {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .initial-loader-logo {
+          width: 54px;
+          height: 54px;
+          display: grid;
+          place-items: center;
+          border-radius: 18px;
+          color: white;
+          background: linear-gradient(135deg, #16a34a, #0ea5e9);
+          font-weight: 900;
+          font-size: 24px;
+        }
+
+        .initial-loader-brand strong,
+        .initial-loader-brand span {
+          display: block;
+        }
+
+        .initial-loader-brand strong {
+          color: #102033;
+          font-size: 18px;
+        }
+
+        .initial-loader-brand span {
+          margin-top: 3px;
+          color: #667085;
+          font-size: 13px;
+        }
+
+        .initial-loader-progress {
+          position: relative;
+          height: 8px;
+          overflow: hidden;
+          border-radius: 999px;
+          background: #f7fafc;
+          border: 1px solid #e3e9f0;
+        }
+
+        .initial-loader-progress span {
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 42%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #16a34a, #0ea5e9);
+          animation: initialProgress 1.1s ease-in-out infinite;
+        }
+
+        @keyframes initialProgress {
+          0% {
+            transform: translateX(-100%);
+          }
+
+          50% {
+            transform: translateX(85%);
+          }
+
+          100% {
+            transform: translateX(240%);
+          }
+        }
+      </style>
+
+      <div class="initial-loader">
+        <div class="initial-loader-card">
+          <div class="initial-loader-brand">
+            <div class="initial-loader-logo">N</div>
+
+            <div>
+              <strong>NutriVision</strong>
+              <span>Загружаем AI-дневник питания</span>
+            </div>
+          </div>
+
+          <div class="initial-loader-progress">
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

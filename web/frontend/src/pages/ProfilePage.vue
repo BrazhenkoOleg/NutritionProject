@@ -1,130 +1,340 @@
+<template>
+  <div class="page">
+    <AppHeader
+      :theme="theme"
+      @logout="logout"
+      @toggle-theme="toggleTheme"
+    />
+
+    <main class="profile-page-modern">
+      <section class="profile-hero card">
+        <div class="profile-hero-copy">
+          <span class="eyebrow">
+            <IconResolver
+              name="Settings"
+              :size="16"
+            />
+            Персональные настройки
+          </span>
+
+          <h1>Профиль и дневные цели</h1>
+
+          <p>
+            Обновите параметры профиля, если изменился вес, активность или цель.
+            NutriVision пересчитает норму КБЖУ автоматически.
+          </p>
+        </div>
+
+        <div class="profile-preview-card">
+          <div class="preview-ring">
+            <strong>{{ previewTargets.kcal }}</strong>
+            <span>ккал/день</span>
+          </div>
+
+          <div class="preview-macros">
+            <div>
+              <strong>{{ previewTargets.protein }}</strong>
+              <span>белки, г</span>
+            </div>
+
+            <div>
+              <strong>{{ previewTargets.fat }}</strong>
+              <span>жиры, г</span>
+            </div>
+
+            <div>
+              <strong>{{ previewTargets.carbs }}</strong>
+              <span>углеводы, г</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="profile-form-card card">
+        <div class="section-header">
+          <div>
+            <span class="section-label">Данные пользователя</span>
+            <h2>{{ authStore.user?.name || 'Профиль' }}</h2>
+          </div>
+
+          <button
+            type="button"
+            class="light-button"
+            @click="router.push('/dashboard')"
+          >
+            Вернуться в дневник
+          </button>
+        </div>
+
+        <form
+          class="profile-form"
+          @submit.prevent="submitProfile"
+        >
+          <div class="profile-grid">
+            <div class="form-group">
+              <label>Пол</label>
+
+              <select v-model="form.gender">
+                <option value="male">Мужской</option>
+                <option value="female">Женский</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Возраст</label>
+
+              <input
+                v-model.number="form.age"
+                type="number"
+                min="14"
+                max="100"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Рост, см</label>
+
+              <input
+                v-model.number="form.height_cm"
+                type="number"
+                min="120"
+                max="230"
+                step="0.1"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Вес, кг</label>
+
+              <input
+                v-model.number="form.weight_kg"
+                type="number"
+                min="35"
+                max="250"
+                step="0.1"
+              />
+            </div>
+
+            <div class="form-group profile-grid-wide">
+              <label>Активность</label>
+
+              <select v-model="form.activity_level">
+                <option value="sedentary">Минимальная активность</option>
+                <option value="light">Лёгкая активность</option>
+                <option value="moderate">Средняя активность</option>
+                <option value="active">Высокая активность</option>
+                <option value="very_active">Очень высокая активность</option>
+              </select>
+            </div>
+
+            <div class="form-group profile-grid-wide">
+              <label>Цель</label>
+
+              <select v-model="form.goal">
+                <option value="lose">Снижение веса</option>
+                <option value="maintain">Поддержание веса</option>
+                <option value="gain">Набор массы</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="profile-current-goals">
+            <div>
+              <strong>{{ currentGoals.kcal }}</strong>
+              <span>текущая цель, ккал</span>
+            </div>
+
+            <div>
+              <strong>{{ currentGoals.protein }}</strong>
+              <span>белки, г</span>
+            </div>
+
+            <div>
+              <strong>{{ currentGoals.fat }}</strong>
+              <span>жиры, г</span>
+            </div>
+
+            <div>
+              <strong>{{ currentGoals.carbs }}</strong>
+              <span>углеводы, г</span>
+            </div>
+          </div>
+
+          <div class="profile-goal-explainer">
+            <IconResolver
+              name="Activity"
+              :size="20"
+            />
+
+            <div>
+              <strong>Новые цели будут применены к будущим расчётам</strong>
+              <span>
+                История питания сохранится, а дневная норма обновится после сохранения профиля.
+              </span>
+            </div>
+          </div>
+
+          <div class="profile-actions">
+            <button
+              type="submit"
+              class="primary-button"
+              :disabled="authStore.isLoading"
+            >
+              <IconResolver
+                v-if="authStore.isLoading"
+                name="Loader2"
+                :size="18"
+                class="spin-icon"
+              />
+
+              <IconResolver
+                v-else
+                name="CheckCircle2"
+                :size="18"
+              />
+
+              <span>{{ authStore.isLoading ? 'Сохраняем...' : 'Сохранить изменения' }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="light-button"
+              @click="resetForm"
+            >
+              Сбросить
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <AppFooter />
+  </div>
+</template>
+
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+
 import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+
+import AppHeader from '../components/layout/AppHeader.vue'
+import AppFooter from '../components/layout/AppFooter.vue'
+import IconResolver from '../components/ui/IconResolver.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const toastStore = useToastStore()
 
-const message = ref('')
+const theme = ref(localStorage.getItem('theme') || 'light')
 
-const form = ref({
+const form = reactive({
   gender: 'male',
-  age: 25,
+  age: 22,
   height_cm: 175,
   weight_kg: 70,
   activity_level: 'moderate',
   goal: 'maintain',
 })
 
-const goalLabels = {
-  lose: 'Похудение',
-  maintain: 'Поддержка формы',
-  gain: 'Набор массы',
+const activityFactors = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
+  very_active: 1.9,
 }
 
-const activityLabels = {
-  sedentary: 'Минимальная активность',
-  light: 'Лёгкая активность',
-  moderate: 'Средняя активность',
-  active: 'Высокая активность',
-  very_active: 'Очень высокая активность',
-}
+const currentGoals = computed(() => {
+  const user = authStore.user || {}
 
-const genderLabels = {
-  male: 'Мужской',
-  female: 'Женский',
-}
+  return {
+    kcal: Math.round(Number(user.daily_kcal_goal || 0)),
+    protein: Math.round(Number(user.daily_protein_goal || 0)),
+    fat: Math.round(Number(user.daily_fat_goal || 0)),
+    carbs: Math.round(Number(user.daily_carbs_goal || 0)),
+  }
+})
 
-const calculatedPreview = computed(() => {
-  const weight = Number(form.value.weight_kg || 0)
-  const height = Number(form.value.height_cm || 0)
-  const age = Number(form.value.age || 0)
+const previewTargets = computed(() => {
+  const weight = Number(form.weight_kg || 0)
+  const height = Number(form.height_cm || 0)
+  const age = Number(form.age || 0)
 
   if (!weight || !height || !age) {
-    return null
+    return {
+      kcal: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+    }
   }
 
   let bmr = 10 * weight + 6.25 * height - 5 * age
 
-  if (form.value.gender === 'male') {
+  if (form.gender === 'male') {
     bmr += 5
   } else {
     bmr -= 161
   }
 
-  const activityFactors = {
-    sedentary: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    active: 1.725,
-    very_active: 1.9,
-  }
+  const maintenance = bmr * (activityFactors[form.activity_level] || 1.55)
 
-  let kcal = bmr * activityFactors[form.value.activity_level]
+  let kcal = maintenance
 
-  if (form.value.goal === 'lose') {
+  if (form.goal === 'lose') {
     kcal *= 0.85
-  }
-
-  if (form.value.goal === 'gain') {
+  } else if (form.goal === 'gain') {
     kcal *= 1.1
   }
 
   const protein = weight * 1.6
   const fat = (kcal * 0.25) / 9
-  const carbs = Math.max((kcal - protein * 4 - kcal * 0.25) / 4, 0)
+  const carbs = Math.max((kcal - protein * 4 - fat * 9) / 4, 0)
 
   return {
     kcal: Math.round(kcal),
-    protein: protein.toFixed(2),
-    fat: fat.toFixed(2),
-    carbs: carbs.toFixed(2),
+    protein: Math.round(protein),
+    fat: Math.round(fat),
+    carbs: Math.round(carbs),
   }
 })
 
-function formatNumber(value) {
-  if (value === null || value === undefined || value === '') {
-    return '—'
-  }
+onMounted(async () => {
+  applyTheme(theme.value)
 
-  return Number(value).toFixed(2)
-}
-
-function fillFormFromUser() {
-  const user = authStore.user
-
-  if (!user) {
-    return
-  }
-
-  form.value = {
-    gender: user.gender || 'male',
-    age: user.age || 25,
-    height_cm: user.height_cm || 175,
-    weight_kg: user.weight_kg || 70,
-    activity_level: user.activity_level || 'moderate',
-    goal: user.goal || 'maintain',
-  }
-}
-
-async function saveProfile() {
-  message.value = 'Сохраняем изменения...'
-
-  try {
-    await authStore.updateProfile(form.value)
-
-    fillFormFromUser()
-    message.value = 'Профиль обновлён. Новая норма КБЖУ рассчитана.'
-  } catch (error) {
-    console.error(error)
-
-    if (error.response?.data?.message) {
-      message.value = error.response.data.message
-    } else {
-      message.value = 'Ошибка при сохранении профиля'
+  if (!authStore.user && authStore.token) {
+    try {
+      await authStore.fetchUser()
+    } catch {
+      router.push('/login')
+      return
     }
   }
+
+  resetForm()
+})
+
+function resetForm() {
+  const user = authStore.user || {}
+
+  form.gender = user.gender || 'male'
+  form.age = Number(user.age || 22)
+  form.height_cm = Number(user.height_cm || 175)
+  form.weight_kg = Number(user.weight_kg || 70)
+  form.activity_level = user.activity_level || 'moderate'
+  form.goal = user.goal || 'maintain'
+}
+
+function applyTheme(value) {
+  theme.value = value
+  localStorage.setItem('theme', value)
+  document.documentElement.setAttribute('data-theme', value)
+}
+
+function toggleTheme() {
+  applyTheme(theme.value === 'light' ? 'dark' : 'light')
 }
 
 async function logout() {
@@ -132,235 +342,29 @@ async function logout() {
   router.push('/login')
 }
 
-onMounted(async () => {
+async function submitProfile() {
   try {
-    if (!authStore.user) {
-      await authStore.fetchUser()
-    }
+    await authStore.updateProfile({
+      gender: form.gender,
+      age: Number(form.age),
+      height_cm: Number(form.height_cm),
+      weight_kg: Number(form.weight_kg),
+      activity_level: form.activity_level,
+      goal: form.goal,
+    })
 
-    fillFormFromUser()
+    toastStore.success('Профиль обновлён.')
+    router.push('/dashboard')
   } catch (error) {
     console.error(error)
-    router.push('/login')
+
+    if (error.response?.data?.errors) {
+      const firstError = Object.values(error.response.data.errors).flat()[0]
+      toastStore.error(firstError || 'Проверьте заполненные данные.')
+      return
+    }
+
+    toastStore.error('Не удалось обновить профиль. Попробуйте ещё раз.')
   }
-})
+}
 </script>
-
-<template>
-  <main class="page profile-page">
-    <section class="card profile-card">
-      <div class="profile-page-header">
-        <div>
-          <h1>Профиль аккаунта</h1>
-
-          <p class="subtitle">
-            Измените параметры тела, уровень активности и цель.
-            После сохранения система пересчитает вашу дневную норму КБЖУ.
-          </p>
-        </div>
-
-        <div class="profile-actions">
-          <button
-            type="button"
-            class="secondary-button"
-            @click="router.push('/dashboard')"
-          >
-            В дневник
-          </button>
-
-          <button
-            type="button"
-            class="light-button"
-            @click="logout"
-          >
-            Выйти
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-if="authStore.user"
-        class="account-info-card"
-      >
-        <div>
-          <span>Имя</span>
-          <strong>{{ authStore.user.name }}</strong>
-        </div>
-
-        <div>
-          <span>Email</span>
-          <strong>{{ authStore.user.email }}</strong>
-        </div>
-
-        <div>
-          <span>Статус профиля</span>
-          <strong>
-            {{ authStore.user.profile_completed ? 'Заполнен' : 'Не заполнен' }}
-          </strong>
-        </div>
-      </div>
-
-      <form
-        class="profile-form"
-        @submit.prevent="saveProfile"
-      >
-        <div class="profile-grid">
-          <div class="field">
-            <label>Пол</label>
-
-            <select v-model="form.gender">
-              <option
-                v-for="(label, value) in genderLabels"
-                :key="value"
-                :value="value"
-              >
-                {{ label }}
-              </option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label>Возраст</label>
-
-            <input
-              v-model.number="form.age"
-              type="number"
-              min="14"
-              max="100"
-              required
-            />
-          </div>
-
-          <div class="field">
-            <label>Рост, см</label>
-
-            <input
-              v-model.number="form.height_cm"
-              type="number"
-              min="120"
-              max="230"
-              step="0.1"
-              required
-            />
-          </div>
-
-          <div class="field">
-            <label>Вес, кг</label>
-
-            <input
-              v-model.number="form.weight_kg"
-              type="number"
-              min="35"
-              max="250"
-              step="0.1"
-              required
-            />
-          </div>
-
-          <div class="field">
-            <label>Активность</label>
-
-            <select v-model="form.activity_level">
-              <option
-                v-for="(label, value) in activityLabels"
-                :key="value"
-                :value="value"
-              >
-                {{ label }}
-              </option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label>Цель</label>
-
-            <select v-model="form.goal">
-              <option
-                v-for="(label, value) in goalLabels"
-                :key="value"
-                :value="value"
-              >
-                {{ label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <div
-          v-if="calculatedPreview"
-          class="profile-target-preview"
-        >
-          <div class="target-preview-header">
-            <div>
-              <h2>Новая расчётная норма</h2>
-
-              <p>
-                Цель: {{ goalLabels[form.goal] }},
-                активность: {{ activityLabels[form.activity_level] }}.
-              </p>
-            </div>
-
-            <div
-              v-if="authStore.user?.daily_kcal_goal"
-              class="old-target"
-            >
-              <span>Текущая норма</span>
-              <strong>{{ authStore.user.daily_kcal_goal }} ккал</strong>
-            </div>
-          </div>
-
-          <div class="totals-grid">
-            <div>
-              <strong>{{ calculatedPreview.kcal }}</strong>
-              <span>ккал</span>
-            </div>
-
-            <div>
-              <strong>{{ formatNumber(calculatedPreview.protein) }}</strong>
-              <span>белки, г</span>
-            </div>
-
-            <div>
-              <strong>{{ formatNumber(calculatedPreview.fat) }}</strong>
-              <span>жиры, г</span>
-            </div>
-
-            <div>
-              <strong>{{ formatNumber(calculatedPreview.carbs) }}</strong>
-              <span>углеводы, г</span>
-            </div>
-          </div>
-        </div>
-
-        <p class="profile-note">
-          Расчёт является ориентировочным и используется только для справочной оценки рациона.
-          При изменении веса, цели или активности рекомендуется обновлять профиль.
-        </p>
-
-        <div class="profile-save-actions">
-          <button
-            type="submit"
-            :disabled="authStore.isLoading"
-          >
-            {{ authStore.isLoading ? 'Сохранение...' : 'Сохранить изменения' }}
-          </button>
-
-          <button
-            type="button"
-            class="light-button"
-            @click="router.push('/dashboard')"
-          >
-            Отмена
-          </button>
-        </div>
-      </form>
-
-      <p
-        v-if="message"
-        class="message"
-      >
-        {{ message }}
-      </p>
-    </section>
-  </main>
-</template>

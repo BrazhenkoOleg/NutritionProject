@@ -1,71 +1,74 @@
-<script setup>
-import { ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
-
-const router = useRouter()
-const authStore = useAuthStore()
-
-const message = ref('')
-
-const form = ref({
-  email: '',
-  password: '',
-})
-
-async function login() {
-  message.value = 'Вход...'
-
-  try {
-    await authStore.login(form.value)
-
-    message.value = ''
-
-    if (authStore.user?.profile_completed) {
-        router.push('/dashboard')
-    } else {
-        router.push('/profile-setup')
-    }
-  } catch (error) {
-    console.error(error)
-
-    if (error.response?.data?.message) {
-      message.value = error.response.data.message
-    } else {
-      message.value = 'Ошибка входа'
-    }
-  }
-}
-</script>
-
 <template>
-  <main class="page auth-page">
-    <section class="card auth-card">
-      <h1>NutriVision</h1>
+  <div class="auth-page">
+    <section class="auth-card">
+      <button
+        type="button"
+        class="auth-theme-toggle"
+        @click="toggleTheme"
+      >
+        <IconResolver
+          :name="theme === 'dark' ? 'Sun' : 'Moon'"
+          :size="17"
+        />
 
-      <p class="subtitle">
-        Войдите в аккаунт, чтобы загружать изображения и сохранять историю анализов.
-      </p>
+        <span>{{ theme === 'dark' ? 'Светлая тема' : 'Тёмная тема' }}</span>
+      </button>
+
+      <div class="auth-header">
+        <div class="auth-logo">
+          <IconResolver
+            name="ScanSearch"
+            :size="28"
+          />
+        </div>
+
+        <span class="eyebrow">
+          <IconResolver
+            name="Sparkles"
+            :size="16"
+          />
+          NutriVision
+        </span>
+
+        <h1>Вход в дневник питания</h1>
+
+        <p>
+          Войдите в аккаунт, чтобы продолжить анализировать блюда,
+          уточнять порции и отслеживать КБЖУ.
+        </p>
+      </div>
 
       <form
         class="auth-form"
-        @submit.prevent="login"
+        @submit.prevent="submitLogin"
       >
-        <div class="field">
+        <div
+          v-if="errorMessage"
+          class="form-alert"
+        >
+          <strong>Не удалось войти</strong>
+          <span>{{ errorMessage }}</span>
+        </div>
+
+        <div class="form-group">
           <label>Email</label>
+
           <input
-            v-model="form.email"
+            v-model.trim="form.email"
             type="email"
-            placeholder="Введите email"
+            autocomplete="email"
+            placeholder="you@example.com"
             required
           />
         </div>
 
-        <div class="field">
+        <div class="form-group">
           <label>Пароль</label>
+
           <input
             v-model="form.password"
             type="password"
+            autocomplete="current-password"
             placeholder="Введите пароль"
             required
           />
@@ -73,25 +76,103 @@ async function login() {
 
         <button
           type="submit"
+          class="auth-submit-button"
           :disabled="authStore.isLoading"
         >
-          {{ authStore.isLoading ? 'Вход...' : 'Войти' }}
+          <IconResolver
+            v-if="authStore.isLoading"
+            name="Loader2"
+            :size="18"
+            class="spin-icon"
+          />
+
+          <IconResolver
+            v-else
+            name="User"
+            :size="18"
+          />
+
+          <span>{{ authStore.isLoading ? 'Входим...' : 'Войти' }}</span>
         </button>
       </form>
 
-      <p
-        v-if="message"
-        class="message"
-      >
-        {{ message }}
-      </p>
+      <div class="auth-switch">
+        <span>Нет аккаунта?</span>
 
-      <p class="auth-link">
-        Нет аккаунта?
         <RouterLink to="/register">
           Зарегистрироваться
         </RouterLink>
-      </p>
+      </div>
     </section>
-  </main>
+  </div>
 </template>
+
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+
+import { useAuthStore } from '../stores/auth'
+import IconResolver from '../components/ui/IconResolver.vue'
+
+const router = useRouter()
+const authStore = useAuthStore()
+
+const theme = ref(localStorage.getItem('theme') || 'light')
+const errorMessage = ref('')
+
+const form = reactive({
+  email: '',
+  password: '',
+})
+
+onMounted(() => {
+  applyTheme(theme.value)
+
+  if (authStore.token && authStore.user?.profile_completed) {
+    router.push('/dashboard')
+  } else if (authStore.token && authStore.user && !authStore.user.profile_completed) {
+    router.push('/profile-setup')
+  }
+})
+
+function applyTheme(value) {
+  theme.value = value
+  localStorage.setItem('theme', value)
+  document.documentElement.setAttribute('data-theme', value)
+}
+
+function toggleTheme() {
+  applyTheme(theme.value === 'light' ? 'dark' : 'light')
+}
+
+async function submitLogin() {
+  errorMessage.value = ''
+
+  if (!form.email || !form.password) {
+    errorMessage.value = 'Введите email и пароль.'
+    return
+  }
+
+  try {
+    await authStore.login({
+      email: form.email,
+      password: form.password,
+    })
+
+    if (authStore.user?.profile_completed) {
+      router.push('/dashboard')
+    } else {
+      router.push('/profile-setup')
+    }
+  } catch (error) {
+    console.error(error)
+
+    if (error.response?.status === 422 || error.response?.status === 401) {
+      errorMessage.value = 'Неверный email или пароль.'
+      return
+    }
+
+    errorMessage.value = 'Не удалось выполнить вход. Попробуйте позже.'
+  }
+}
+</script>

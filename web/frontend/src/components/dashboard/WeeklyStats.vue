@@ -1,5 +1,103 @@
+<template>
+  <section class="weekly-stats">
+    <div class="section-header">
+      <div>
+        <span class="section-label">Неделя</span>
+        <h2>Статистика питания</h2>
+      </div>
+
+      <div class="weekly-range">
+        {{ formatShortDate(weekDays[0].date) }} — {{ formatShortDate(weekDays[6].date) }}
+      </div>
+    </div>
+
+    <div class="weekly-summary-grid">
+      <div>
+        <strong>{{ Math.round(weeklyTotals.kcal) }}</strong>
+        <span>ккал за неделю</span>
+      </div>
+
+      <div>
+        <strong>{{ Math.round(weeklyAverageKcal) }}</strong>
+        <span>ккал в среднем</span>
+      </div>
+
+      <div>
+        <strong>{{ recordsCount }}</strong>
+        <span>записей</span>
+      </div>
+
+      <div>
+        <strong>{{ targetCompletion }}%</strong>
+        <span>от недельной цели</span>
+      </div>
+    </div>
+
+    <div class="weekly-chart">
+      <button
+        v-for="day in weekDays"
+        :key="day.key"
+        type="button"
+        class="weekly-chart-day"
+        :class="{ active: selectedDayKey === day.key }"
+        @click="selectedDayKey = day.key"
+      >
+        <div
+          class="weekly-bar"
+          :style="{ height: `${getBarHeight(day.totals.kcal)}%` }"
+        ></div>
+
+        <span class="weekly-day-label">{{ day.label }}</span>
+        <strong>{{ Math.round(day.totals.kcal) }}</strong>
+      </button>
+    </div>
+
+    <div class="weekly-selected-day">
+      <div class="selected-day-header">
+        <div>
+          <strong>{{ selectedDayTitle }}</strong>
+          <span>{{ selectedDayAnalyses.length }} записей</span>
+        </div>
+
+        <span
+          class="selected-day-status"
+          :class="selectedDayStatus.className"
+        >
+          {{ selectedDayStatus.text }}
+        </span>
+      </div>
+
+      <div class="selected-day-macros">
+        <div>
+          <strong>{{ Math.round(selectedDayTotals.kcal) }}</strong>
+          <span>ккал</span>
+        </div>
+
+        <div>
+          <strong>{{ formatNumber(selectedDayTotals.protein) }}</strong>
+          <span>белки, г</span>
+        </div>
+
+        <div>
+          <strong>{{ formatNumber(selectedDayTotals.fat) }}</strong>
+          <span>жиры, г</span>
+        </div>
+
+        <div>
+          <strong>{{ formatNumber(selectedDayTotals.carbs) }}</strong>
+          <span>углеводы, г</span>
+        </div>
+      </div>
+
+      <p class="weekly-recommendation">
+        {{ recommendationText }}
+      </p>
+    </div>
+  </section>
+</template>
+
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   analyses: {
@@ -12,53 +110,56 @@ const props = defineProps({
   },
 })
 
-const dayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-
-const selectedDayKey = ref(null)
+const selectedDayKey = ref(getTodayDate())
 
 const weekDays = computed(() => {
-  const startOfWeek = getStartOfWeek(new Date())
+  const today = new Date()
+  const monday = getMonday(today)
 
-  return dayLabels.map((label, index) => {
-    const date = addDays(startOfWeek, index)
-    const dateKey = toDateInputValue(date)
+  return Array.from({ length: 7 }).map((_, index) => {
+    const date = new Date(monday)
+    date.setDate(monday.getDate() + index)
 
-    const dayAnalyses = props.analyses.filter((analysis) => {
-      return getAnalysisDate(analysis) === dateKey
-    })
+    const key = toDateInputValue(date)
+    const dayAnalyses = props.analyses.filter((analysis) => getAnalysisDate(analysis) === key)
+    const totals = getTotalsFromAnalyses(dayAnalyses)
 
     return {
-      label,
       date,
-      dateKey,
+      key,
+      label: date.toLocaleDateString('ru-RU', {
+        weekday: 'short',
+      }),
       analyses: dayAnalyses,
-      totals: getDayTotals(dayAnalyses),
+      totals,
     }
   })
 })
 
 const selectedDay = computed(() => {
-  if (!weekDays.value.length) {
-    return null
-  }
-
-  if (selectedDayKey.value) {
-    return weekDays.value.find((day) => day.dateKey === selectedDayKey.value) || weekDays.value[0]
-  }
-
-  const todayKey = toDateInputValue(new Date())
-  return weekDays.value.find((day) => day.dateKey === todayKey) || weekDays.value[0]
+  return weekDays.value.find((day) => day.key === selectedDayKey.value) || weekDays.value[0]
 })
 
-const weekTotals = computed(() => {
-  return weekDays.value.reduce(
-    (totals, day) => {
-      totals.kcal += day.totals.kcal
-      totals.protein += day.totals.protein
-      totals.fat += day.totals.fat
-      totals.carbs += day.totals.carbs
+const selectedDayAnalyses = computed(() => selectedDay.value?.analyses || [])
 
-      return totals
+const selectedDayTotals = computed(() => {
+  return selectedDay.value?.totals || {
+    kcal: 0,
+    protein: 0,
+    fat: 0,
+    carbs: 0,
+  }
+})
+
+const weeklyTotals = computed(() => {
+  return weekDays.value.reduce(
+    (acc, day) => {
+      acc.kcal += day.totals.kcal
+      acc.protein += day.totals.protein
+      acc.fat += day.totals.fat
+      acc.carbs += day.totals.carbs
+
+      return acc
     },
     {
       kcal: 0,
@@ -69,68 +170,132 @@ const weekTotals = computed(() => {
   )
 })
 
-const weekAverage = computed(() => {
+const recordsCount = computed(() => {
+  return weekDays.value.reduce((acc, day) => acc + day.analyses.length, 0)
+})
+
+const weeklyAverageKcal = computed(() => {
+  return weeklyTotals.value.kcal / 7
+})
+
+const maxDayKcal = computed(() => {
+  return Math.max(...weekDays.value.map((day) => day.totals.kcal), 1)
+})
+
+const dailyGoal = computed(() => {
+  return Number(props.user?.daily_kcal_goal || 0)
+})
+
+const weeklyGoal = computed(() => {
+  return dailyGoal.value * 7
+})
+
+const targetCompletion = computed(() => {
+  if (!weeklyGoal.value) {
+    return 0
+  }
+
+  return Math.min(Math.round((weeklyTotals.value.kcal / weeklyGoal.value) * 100), 999)
+})
+
+const selectedDayTitle = computed(() => {
+  if (!selectedDay.value) {
+    return 'Выбранный день'
+  }
+
+  return selectedDay.value.date.toLocaleDateString('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+})
+
+const selectedDayStatus = computed(() => {
+  if (!dailyGoal.value) {
+    return {
+      text: 'цель не задана',
+      className: 'neutral',
+    }
+  }
+
+  const percent = (selectedDayTotals.value.kcal / dailyGoal.value) * 100
+
+  if (percent < 75) {
+    return {
+      text: 'ниже цели',
+      className: 'warning',
+    }
+  }
+
+  if (percent <= 115) {
+    return {
+      text: 'в норме',
+      className: 'success',
+    }
+  }
+
   return {
-    kcal: weekTotals.value.kcal / 7,
-    protein: weekTotals.value.protein / 7,
-    fat: weekTotals.value.fat / 7,
-    carbs: weekTotals.value.carbs / 7,
+    text: 'выше цели',
+    className: 'danger',
   }
 })
 
-const maxKcal = computed(() => {
-  const values = weekDays.value.map((day) => day.totals.kcal)
-  const max = Math.max(...values)
+const recommendationText = computed(() => {
+  if (!dailyGoal.value) {
+    return 'Заполните профиль, чтобы получить персональные рекомендации по дневной норме.'
+  }
 
-  return max > 0 ? max : 1
+  const kcal = selectedDayTotals.value.kcal
+
+  if (kcal === 0) {
+    return 'В этот день пока нет записей. Добавьте фото блюда или внесите продукты вручную.'
+  }
+
+  const percent = (kcal / dailyGoal.value) * 100
+
+  if (percent < 75) {
+    return 'Рацион ниже дневной цели. Можно добавить полноценный приём пищи или увеличить порцию.'
+  }
+
+  if (percent <= 115) {
+    return 'День выглядит сбалансированно относительно вашей дневной нормы.'
+  }
+
+  return 'Калорийность выше дневной цели. Проверьте размер порций и перекусы.'
 })
 
-const weekRecordsCount = computed(() => {
-  return weekDays.value.reduce((sum, day) => sum + day.analyses.length, 0)
-})
+watch(
+  () => weekDays.value.map((day) => day.key).join(','),
+  () => {
+    const today = getTodayDate()
+    const hasToday = weekDays.value.some((day) => day.key === today)
 
-function formatNumber(value) {
-  if (value === null || value === undefined || value === '') {
-    return '—'
-  }
+    selectedDayKey.value = hasToday ? today : weekDays.value[0]?.key
+  },
+  { immediate: true },
+)
 
-  return Number(value).toFixed(2)
+function getMonday(date) {
+  const result = new Date(date)
+  const day = result.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+
+  result.setDate(result.getDate() + diff)
+  result.setHours(0, 0, 0, 0)
+
+  return result
 }
 
-function getProductWeight(product) {
-  return Number(product.weight_g || 100)
+function getTodayDate() {
+  return toDateInputValue(new Date())
 }
 
-function getProductKcal(product) {
-  if (product.total_kcal !== undefined && product.total_kcal !== null) {
-    return Number(product.total_kcal)
-  }
+function toDateInputValue(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
 
-  return (Number(product.kcal_per_100g || 0) * getProductWeight(product)) / 100
-}
-
-function getProductProtein(product) {
-  if (product.total_protein !== undefined && product.total_protein !== null) {
-    return Number(product.total_protein)
-  }
-
-  return (Number(product.protein_per_100g || 0) * getProductWeight(product)) / 100
-}
-
-function getProductFat(product) {
-  if (product.total_fat !== undefined && product.total_fat !== null) {
-    return Number(product.total_fat)
-  }
-
-  return (Number(product.fat_per_100g || 0) * getProductWeight(product)) / 100
-}
-
-function getProductCarbs(product) {
-  if (product.total_carbs !== undefined && product.total_carbs !== null) {
-    return Number(product.total_carbs)
-  }
-
-  return (Number(product.carbs_per_100g || 0) * getProductWeight(product)) / 100
+  return `${year}-${month}-${day}`
 }
 
 function getAnalysisDate(analysis) {
@@ -142,53 +307,57 @@ function getAnalysisDate(analysis) {
     return ''
   }
 
-  const date = new Date(analysis.created_at)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+  return toDateInputValue(new Date(analysis.created_at))
 }
 
-function getStartOfWeek(date = new Date()) {
-  const result = new Date(date)
-  const day = result.getDay()
-  const diff = day === 0 ? -6 : 1 - day
+function getTotalsFromAnalyses(items) {
+  return items.reduce(
+    (acc, analysis) => {
+      const totals = getAnalysisTotals(analysis)
 
-  result.setDate(result.getDate() + diff)
-  result.setHours(0, 0, 0, 0)
+      acc.kcal += totals.kcal
+      acc.protein += totals.protein
+      acc.fat += totals.fat
+      acc.carbs += totals.carbs
 
-  return result
+      return acc
+    },
+    {
+      kcal: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+    },
+  )
 }
 
-function toDateInputValue(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+function getAnalysisTotals(analysis) {
+  if (analysis.totals) {
+    return {
+      kcal: Number(analysis.totals.kcal || 0),
+      protein: Number(analysis.totals.protein || 0),
+      fat: Number(analysis.totals.fat || 0),
+      carbs: Number(analysis.totals.carbs || 0),
+    }
+  }
 
-  return `${year}-${month}-${day}`
-}
+  if (!analysis.products?.length) {
+    return {
+      kcal: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+    }
+  }
 
-function addDays(date, count) {
-  const result = new Date(date)
-  result.setDate(result.getDate() + count)
+  return analysis.products.reduce(
+    (acc, product) => {
+      acc.kcal += Number(product.total_kcal || 0)
+      acc.protein += Number(product.total_protein || 0)
+      acc.fat += Number(product.total_fat || 0)
+      acc.carbs += Number(product.total_carbs || 0)
 
-  return result
-}
-
-function getDayTotals(analyses) {
-  return analyses.reduce(
-    (totals, analysis) => {
-      const products = analysis.products || []
-
-      products.forEach((product) => {
-        totals.kcal += getProductKcal(product)
-        totals.protein += getProductProtein(product)
-        totals.fat += getProductFat(product)
-        totals.carbs += getProductCarbs(product)
-      })
-
-      return totals
+      return acc
     },
     {
       kcal: 0,
@@ -200,148 +369,21 @@ function getDayTotals(analyses) {
 }
 
 function getBarHeight(kcal) {
-  return Math.max((Number(kcal || 0) / maxKcal.value) * 100, 4)
+  if (!maxDayKcal.value) {
+    return 8
+  }
+
+  return Math.max((kcal / maxDayKcal.value) * 100, kcal > 0 ? 10 : 4)
 }
 
-function selectDay(day) {
-  selectedDayKey.value = day.dateKey
+function formatNumber(value) {
+  return Number(value || 0).toFixed(1)
 }
 
-function isSelectedDay(day) {
-  return selectedDay.value?.dateKey === day.dateKey
-}
-
-function formatDayDate(date) {
-  return new Date(date).toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
+function formatShortDate(date) {
+  return date.toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
   })
 }
-
-function getWeeklyRecommendation() {
-  const user = props.user
-
-  if (!user?.profile_completed) {
-    return 'Заполните профиль, чтобы система могла сравнивать недельный рацион с вашей нормой.'
-  }
-
-  const kcalGoal = Number(user.daily_kcal_goal || 0)
-  const proteinGoal = Number(user.daily_protein_goal || 0)
-
-  if (kcalGoal && weekAverage.value.kcal > kcalGoal * 1.1) {
-    return 'Средняя калорийность за неделю выше вашей нормы. Стоит обратить внимание на размер порций и калорийные продукты.'
-  }
-
-  if (kcalGoal && weekAverage.value.kcal < kcalGoal * 0.8) {
-    return 'Средняя калорийность за неделю заметно ниже нормы. Возможно, рацион недостаточно питательный.'
-  }
-
-  if (proteinGoal && weekAverage.value.protein < proteinGoal * 0.8) {
-    return 'В среднем за неделю белка недостаточно. Добавьте больше белковых продуктов в рацион.'
-  }
-
-  return 'Средние показатели за неделю близки к рассчитанной норме.'
-}
 </script>
-
-<template>
-  <section class="weekly-stats">
-    <div class="weekly-stats-header">
-      <div>
-        <h3>📊 Статистика за неделю</h3>
-
-        <p>
-          Нажмите на столбец, чтобы посмотреть подробности за выбранный день.
-        </p>
-      </div>
-    </div>
-
-    <div class="weekly-summary-grid">
-      <div>
-        <span>Итого ккал</span>
-        <strong>{{ Math.round(weekTotals.kcal || 0) }}</strong>
-      </div>
-
-      <div>
-        <span>Среднее ккал/день</span>
-        <strong>{{ Math.round(weekAverage.kcal || 0) }}</strong>
-      </div>
-
-      <div>
-        <span>Средний белок</span>
-        <strong>{{ formatNumber(weekAverage.protein) }} г</strong>
-      </div>
-
-      <div>
-        <span>Записей</span>
-        <strong>{{ weekRecordsCount }}</strong>
-      </div>
-    </div>
-
-    <div class="weekly-chart">
-      <button
-        v-for="day in weekDays"
-        :key="day.dateKey"
-        type="button"
-        class="weekly-chart-day"
-        :class="{ active: isSelectedDay(day) }"
-        @click="selectDay(day)"
-      >
-        <div class="weekly-chart-bar-wrap">
-          <div
-            class="weekly-chart-bar"
-            :style="{ height: `${getBarHeight(day.totals.kcal)}%` }"
-          ></div>
-        </div>
-
-        <strong>{{ day.label }}</strong>
-        <span>{{ formatNumber(day.totals.kcal) }}</span>
-      </button>
-    </div>
-
-    <div
-      v-if="selectedDay"
-      class="weekly-selected-day"
-    >
-      <div class="weekly-selected-day-header">
-        <div>
-          <h4>{{ selectedDay.label }}, {{ formatDayDate(selectedDay.date) }}</h4>
-          <span>{{ selectedDay.analyses.length }} записей за день</span>
-        </div>
-
-        <div class="weekly-selected-kcal">
-          {{ formatNumber(selectedDay.totals.kcal) }} ккал
-        </div>
-      </div>
-
-      <div class="weekly-selected-kbju">
-        <div>
-          <strong>{{ formatNumber(selectedDay.totals.protein) }}</strong>
-          <span>белки, г</span>
-        </div>
-
-        <div>
-          <strong>{{ formatNumber(selectedDay.totals.fat) }}</strong>
-          <span>жиры, г</span>
-        </div>
-
-        <div>
-          <strong>{{ formatNumber(selectedDay.totals.carbs) }}</strong>
-          <span>углеводы, г</span>
-        </div>
-      </div>
-
-      <p
-        v-if="selectedDay.analyses.length === 0"
-        class="weekly-selected-empty"
-      >
-        За этот день пока нет записей.
-      </p>
-    </div>
-
-    <div class="weekly-recommendation">
-      {{ getWeeklyRecommendation() }}
-    </div>
-  </section>
-</template>
