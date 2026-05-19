@@ -252,6 +252,109 @@ function handleMealFileChange(event, mealType) {
   mealPreviewUrls.value[mealType] = file ? URL.createObjectURL(file) : null
 }
 
+function compressImage(file, maxSize = 1024, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const allowedTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+    ]
+
+    if (!allowedTypes.includes(file.type)) {
+      reject(new Error('Поддерживаются только изображения JPG, PNG и WEBP'))
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = (event) => {
+      const image = new Image()
+
+      image.onload = () => {
+        const canvas = document.createElement('canvas')
+
+        let width = image.width
+        let height = image.height
+
+        if (width > height && width > maxSize) {
+          height = Math.round((height * maxSize) / width)
+          width = maxSize
+        } else if (height > maxSize) {
+          width = Math.round((width * maxSize) / height)
+          height = maxSize
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        const context = canvas.getContext('2d')
+
+        if (!context) {
+          reject(new Error('Не удалось подготовить изображение'))
+          return
+        }
+
+        context.drawImage(image, 0, 0, width, height)
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Не удалось сжать изображение'))
+              return
+            }
+
+            const compressedFile = new File(
+              [blob],
+              getCompressedFileName(file.name),
+              {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              },
+            )
+
+            resolve(compressedFile)
+          },
+          'image/jpeg',
+          quality,
+        )
+      }
+
+      image.onerror = () => {
+        reject(new Error('Не удалось прочитать изображение. Выберите JPG, PNG или WEBP.'))
+      }
+
+      image.src = event.target.result
+    }
+
+    reader.onerror = () => {
+      reject(new Error('Не удалось загрузить файл'))
+    }
+
+    reader.readAsDataURL(file)
+  })
+}
+
+function getCompressedFileName(originalName) {
+  const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, '')
+
+  return `${nameWithoutExtension || 'image'}_compressed.jpg`
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) {
+    return '0 КБ'
+  }
+
+  const kb = bytes / 1024
+
+  if (kb < 1024) {
+    return `${kb.toFixed(1)} КБ`
+  }
+
+  return `${(kb / 1024).toFixed(2)} МБ`
+}
+
 async function fetchProducts() {
   try {
     const response = await api.get('/products')
@@ -278,23 +381,24 @@ async function analyzeMealImage(mealType) {
     return
   }
 
-  const formData = new FormData()
-  formData.append('image', file)
-  formData.append('meal_type', mealType)
-  formData.append('entry_date', selectedDate.value)
-
   isLoading.value = true
   uploadMealType.value = mealType
-  message.value = 'Изображение анализируется...'
+  message.value = 'Подготавливаем изображение...'
 
   try {
-    const response = await api.post('/analyze', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    })
+    const compressedFile = await compressImage(file, 1024, 0.78)
 
-    message.value = `Анализ выполнен. ID анализа: ${response.data.analysis.id}`
+    console.log('Исходный файл:', formatFileSize(file.size))
+    console.log('Сжатый файл:', formatFileSize(compressedFile.size))
+
+    const formData = new FormData()
+    formData.append('image', compressedFile)
+    formData.append('meal_type', mealType)
+    formData.append('entry_date', selectedDate.value)
+
+    message.value = `Отправляем изображение на анализ (${formatFileSize(compressedFile.size)})...`
+
+    await api.post('/analyze', formData)
 
     mealUploadFiles.value[mealType] = null
 
@@ -303,17 +407,24 @@ async function analyzeMealImage(mealType) {
       mealPreviewUrls.value[mealType] = null
     }
 
+    message.value = 'Фото успешно проанализировано'
+
     await fetchAnalyses()
   } catch (error) {
     console.error(error)
+    console.log(error.response?.data)
 
     if (error.response?.status === 401) {
       await logout()
       return
     }
 
-    if (error.response?.data?.message) {
+    if (error.response?.data?.ml_body) {
+      message.value = `Ошибка ML-сервиса: ${error.response.data.ml_body}`
+    } else if (error.response?.data?.message) {
       message.value = error.response.data.message
+    } else if (error.message) {
+      message.value = error.message
     } else {
       message.value = 'Ошибка при анализе изображения'
     }

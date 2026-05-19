@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Analysis;
 use App\Models\Product;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -33,25 +34,39 @@ class AnalysisController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'meal_type' => ['required', 'string', 'in:breakfast,lunch,dinner,snack'],
             'entry_date' => ['required', 'date'],
         ]);
 
         $path = $request->file('image')->store('analyses', 'public');
-        $imageUrl = Storage::disk('public')->url($path);
+        $imageUrl = Storage::url($path);
 
-        $response = Http::attach(
-            'image',
-            file_get_contents($request->file('image')->getRealPath()),
-            $request->file('image')->getClientOriginalName()
-        )->post(config('services.ml.url') . '/predict');
+        try {
+            $response = Http::timeout(180)
+                ->attach(
+                    'image',
+                    file_get_contents($request->file('image')->getRealPath()),
+                    $request->file('image')->getClientOriginalName()
+                )
+                ->post(config('services.ml.url') . '/predict');
+        } catch (ConnectionException $error) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'ML service connection error',
+                'ml_url' => config('services.ml.url') . '/predict',
+                'details' => $error->getMessage(),
+            ], 502);
+        }
 
         if (!$response->successful()) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'ML service error',
-                'details' => $response->json(),
+                'ml_url' => config('services.ml.url') . '/predict',
+                'ml_status' => $response->status(),
+                'ml_body' => $response->body(),
+                'ml_json' => $response->json(),
             ], 502);
         }
 

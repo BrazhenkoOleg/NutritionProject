@@ -38,8 +38,8 @@ defineEmits(['file-change', 'analyze'])
 
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp"
-          @change="$emit('file-change', $event)"
+          accept="image/jpeg,image/jpg,image/png,image/webp"
+          @change="$emit('file-change', $event, meal.value)"
         />
       </label>
 

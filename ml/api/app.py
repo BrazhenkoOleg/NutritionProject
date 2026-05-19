@@ -343,6 +343,14 @@ async def predict(image: UploadFile = File(...)):
             detail=str(error),
         )
 
+    except Exception as error:
+        print("Predict error:", repr(error), flush=True)
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        )
+
     finally:
         if temp_image_path.exists():
             temp_image_path.unlink()
