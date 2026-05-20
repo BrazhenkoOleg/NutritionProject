@@ -1,26 +1,36 @@
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from collections import defaultdict
 import asyncio
 import gc
 import json
+import os
 
 import cv2
 import numpy as np
 import onnxruntime as ort
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from huggingface_hub import hf_hub_download
 
 
 ML_ROOT = Path(__file__).resolve().parents[1]
 
-MODEL_PATH = ML_ROOT / "models" / "best.onnx"
+MODELS_DIR = ML_ROOT / "models"
 PRODUCTS_PATH = ML_ROOT / "data" / "nutrition_products_ru_kbju_100g.json"
 
-IMAGE_SIZE = 640
-CONF_THRESHOLD = 0.25
-IOU_THRESHOLD = 0.45
-MAX_FILE_SIZE = 8 * 1024 * 1024
+MODEL_FILE = os.getenv("HF_MODEL_FILE", "best_nutrivision.onnx")
+LOCAL_MODEL_PATH = MODELS_DIR / MODEL_FILE
+
+HF_MODEL_REPO = os.getenv("HF_MODEL_REPO")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "768"))
+
+CONF_THRESHOLD = float(os.getenv("CONF_THRESHOLD", "0.25"))
+IOU_THRESHOLD = float(os.getenv("IOU_THRESHOLD", "0.45"))
+
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "8"))
+MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
 
 
 def load_class_names():
@@ -52,9 +62,9 @@ CLASS_NAMES = load_class_names()
 
 
 app = FastAPI(
-    title="Nutrition ONNX API",
-    description="API для распознавания продуктов питания на изображениях через ONNX Runtime",
-    version="2.1.0",
+    title="NutriVision ML API",
+    description="FastAPI service for food detection using YOLO ONNX Runtime",
+    version="3.0.0",
 )
 
 app.add_middleware(
@@ -65,36 +75,81 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 session = None
+session_model_path = None
 predict_lock = asyncio.Lock()
+
+
+def ensure_model_path() -> Path:
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if LOCAL_MODEL_PATH.exists() and LOCAL_MODEL_PATH.stat().st_size > 0:
+        return LOCAL_MODEL_PATH
+
+    if not HF_MODEL_REPO:
+        raise FileNotFoundError(
+            "ONNX модель не найдена локально и переменная HF_MODEL_REPO не задана"
+        )
+
+    downloaded_path = hf_hub_download(
+        repo_id=HF_MODEL_REPO,
+        filename=MODEL_FILE,
+        token=HF_TOKEN,
+        local_dir=str(MODELS_DIR),
+    )
+
+    downloaded_path = Path(downloaded_path)
+
+    if not downloaded_path.exists() or downloaded_path.stat().st_size == 0:
+        raise FileNotFoundError("ONNX модель не была скачана из Hugging Face")
+
+    return downloaded_path
 
 
 def get_session():
     global session
+    global session_model_path
 
     if session is None:
-        if not MODEL_PATH.exists():
-            raise FileNotFoundError("ONNX модель не найдена")
+        model_path = ensure_model_path()
+
+        options = ort.SessionOptions()
+
+        # Render-friendly settings.
+        # Ограничиваем параллелизм, чтобы ONNX Runtime не забирал слишком много RAM/CPU.
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
+
+        # Снижаем вероятность резких скачков памяти.
+        options.enable_mem_pattern = False
+        options.enable_cpu_mem_arena = False
+
+        # Не включаем тяжёлые graph optimizations сверх базовых.
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
 
         session = ort.InferenceSession(
-            str(MODEL_PATH),
+            str(model_path),
+            sess_options=options,
             providers=["CPUExecutionProvider"],
         )
+
+        session_model_path = str(model_path)
 
     return session
 
 
 def letterbox(image, new_shape=640, color=(114, 114, 114)):
-    height, width = image.shape[:2]
+    original_height, original_width = image.shape[:2]
 
-    scale = min(new_shape / height, new_shape / width)
+    scale = min(new_shape / original_height, new_shape / original_width)
 
-    new_width = int(round(width * scale))
-    new_height = int(round(height * scale))
+    resized_width = int(round(original_width * scale))
+    resized_height = int(round(original_height * scale))
 
-    resized = cv2.resize(
+    resized_image = cv2.resize(
         image,
-        (new_width, new_height),
+        (resized_width, resized_height),
         interpolation=cv2.INTER_LINEAR,
     )
 
@@ -104,62 +159,85 @@ def letterbox(image, new_shape=640, color=(114, 114, 114)):
         dtype=np.uint8,
     )
 
-    pad_x = (new_shape - new_width) // 2
-    pad_y = (new_shape - new_height) // 2
+    pad_x = (new_shape - resized_width) // 2
+    pad_y = (new_shape - resized_height) // 2
 
-    canvas[pad_y:pad_y + new_height, pad_x:pad_x + new_width] = resized
+    canvas[
+        pad_y:pad_y + resized_height,
+        pad_x:pad_x + resized_width,
+    ] = resized_image
 
     return canvas, scale, pad_x, pad_y
 
 
-def preprocess(image_path: Path):
-    image = cv2.imread(str(image_path))
+def preprocess_image_bytes(image_bytes: bytes):
+    image_array = np.frombuffer(image_bytes, np.uint8)
+    image_bgr = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-    if image is None:
+    if image_bgr is None:
         raise ValueError("Не удалось прочитать изображение")
 
-    original_height, original_width = image.shape[:2]
+    original_height, original_width = image_bgr.shape[:2]
 
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image_resized, scale, pad_x, pad_y = letterbox(image_rgb, IMAGE_SIZE)
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+
+    image_resized, scale, pad_x, pad_y = letterbox(
+        image_rgb,
+        IMAGE_SIZE,
+    )
 
     input_tensor = image_resized.astype(np.float32) / 255.0
     input_tensor = np.transpose(input_tensor, (2, 0, 1))
     input_tensor = np.expand_dims(input_tensor, axis=0)
 
-    return input_tensor, original_width, original_height, scale, pad_x, pad_y
+    return (
+        input_tensor,
+        original_width,
+        original_height,
+        scale,
+        pad_x,
+        pad_y,
+    )
 
 
 def xywh_to_xyxy(box):
-    x, y, w, h = box
+    x, y, width, height = box
 
-    x1 = x - w / 2
-    y1 = y - h / 2
-    x2 = x + w / 2
-    y2 = y + h / 2
+    return [
+        x - width / 2,
+        y - height / 2,
+        x + width / 2,
+        y + height / 2,
+    ]
 
-    return [x1, y1, x2, y2]
 
-
-def clip_box(box, width, height):
+def clip_box(box, image_width, image_height):
     x1, y1, x2, y2 = box
 
-    x1 = max(0, min(x1, width))
-    y1 = max(0, min(y1, height))
-    x2 = max(0, min(x2, width))
-    y2 = max(0, min(y2, height))
+    x1 = max(0, min(float(x1), image_width))
+    y1 = max(0, min(float(y1), image_height))
+    x2 = max(0, min(float(x2), image_width))
+    y2 = max(0, min(float(y2), image_height))
 
     return [x1, y1, x2, y2]
 
 
-def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
+def normalize_predictions(outputs):
     predictions = outputs[0]
 
     if predictions.ndim == 3:
         predictions = predictions[0]
 
+    # Частый формат YOLO ONNX: [classes + 4, boxes]
+    # Для обработки удобнее: [boxes, classes + 4]
     if predictions.shape[0] < predictions.shape[1]:
         predictions = predictions.T
+
+    return predictions
+
+
+def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
+    predictions = normalize_predictions(outputs)
 
     boxes = []
     scores = []
@@ -197,7 +275,12 @@ def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
         if width <= 0 or height <= 0:
             continue
 
-        boxes.append([float(x1), float(y1), float(width), float(height)])
+        boxes.append([
+            float(x1),
+            float(y1),
+            float(width),
+            float(height),
+        ])
         scores.append(confidence)
         class_ids.append(class_id)
 
@@ -216,12 +299,13 @@ def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
     selected_indices = np.array(selected_indices).flatten()
 
     for index in selected_indices:
-        x, y, w, h = boxes[index]
         class_id = class_ids[index]
-        confidence = scores[index]
 
         if class_id < 0 or class_id >= len(CLASS_NAMES):
             continue
+
+        x, y, width, height = boxes[index]
+        confidence = scores[index]
 
         detections.append({
             "class_name": CLASS_NAMES[class_id],
@@ -229,20 +313,27 @@ def postprocess(outputs, original_width, original_height, scale, pad_x, pad_y):
             "bbox": {
                 "x1": round(float(x), 2),
                 "y1": round(float(y), 2),
-                "x2": round(float(x + w), 2),
-                "y2": round(float(y + h), 2),
+                "x2": round(float(x + width), 2),
+                "y2": round(float(y + height), 2),
             },
         })
+
+    detections.sort(
+        key=lambda item: item["confidence"],
+        reverse=True,
+    )
 
     return detections
 
 
 def group_products(detections):
-    grouped = defaultdict(lambda: {
-        "class_name": None,
-        "count": 0,
-        "max_confidence": 0.0,
-    })
+    grouped = defaultdict(
+        lambda: {
+            "class_name": None,
+            "count": 0,
+            "max_confidence": 0.0,
+        }
+    )
 
     for detection in detections:
         class_name = detection["class_name"]
@@ -261,8 +352,11 @@ def group_products(detections):
         reverse=True,
     )
 
-    for item in products:
-        item["max_confidence"] = round(item["max_confidence"], 4)
+    for product in products:
+        product["max_confidence"] = round(
+            float(product["max_confidence"]),
+            4,
+        )
 
     return products
 
@@ -271,7 +365,7 @@ def group_products(detections):
 def root():
     return {
         "status": "ok",
-        "message": "Nutrition ONNX API is working",
+        "message": "NutriVision ML API is working",
     }
 
 
@@ -280,12 +374,38 @@ def health():
     return {
         "status": "ok",
         "runtime": "onnxruntime",
-        "model_ready": MODEL_PATH.exists(),
+        "model_file": MODEL_FILE,
+        "local_model_ready": LOCAL_MODEL_PATH.exists(),
+        "hf_model_repo_configured": bool(HF_MODEL_REPO),
         "products_ready": PRODUCTS_PATH.exists(),
         "classes_count": len(CLASS_NAMES),
         "image_size": IMAGE_SIZE,
+        "confidence_threshold": CONF_THRESHOLD,
+        "iou_threshold": IOU_THRESHOLD,
+        "max_file_size_mb": MAX_FILE_SIZE_MB,
         "model_loaded": session is not None,
     }
+
+
+@app.post("/warmup")
+def warmup():
+    try:
+        ort_session = get_session()
+
+        return {
+            "status": "ok",
+            "message": "Model loaded successfully",
+            "model_file": MODEL_FILE,
+            "model_path": session_model_path,
+            "input_name": ort_session.get_inputs()[0].name,
+        }
+    except Exception as error:
+        print("Warmup error:", repr(error), flush=True)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось загрузить модель",
+        )
 
 
 @app.post("/predict")
@@ -297,28 +417,37 @@ async def predict(image: UploadFile = File(...)):
         )
 
     async with predict_lock:
-        temp_image_path = None
+        image_bytes = None
+        input_tensor = None
+        outputs = None
+        detections = None
+        products = None
 
         try:
-            content = await image.read()
+            image_bytes = await image.read()
 
-            if len(content) > MAX_FILE_SIZE:
+            if not image_bytes:
                 raise HTTPException(
-                    status_code=413,
-                    detail="Файл слишком большой. Загрузите изображение до 8 МБ.",
+                    status_code=400,
+                    detail="Файл изображения пустой",
                 )
 
-            suffix = Path(image.filename or "").suffix or ".jpg"
-
-            with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-                temp_file.write(content)
-                temp_image_path = Path(temp_file.name)
+            if len(image_bytes) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Файл слишком большой. Загрузите изображение до {MAX_FILE_SIZE_MB} МБ.",
+                )
 
             ort_session = get_session()
 
-            input_tensor, original_width, original_height, scale, pad_x, pad_y = preprocess(
-                temp_image_path,
-            )
+            (
+                input_tensor,
+                original_width,
+                original_height,
+                scale,
+                pad_x,
+                pad_y,
+            ) = preprocess_image_bytes(image_bytes)
 
             input_name = ort_session.get_inputs()[0].name
 
@@ -366,7 +495,10 @@ async def predict(image: UploadFile = File(...)):
             )
 
         finally:
-            if temp_image_path is not None and temp_image_path.exists():
-                temp_image_path.unlink()
+            del image_bytes
+            del input_tensor
+            del outputs
+            del detections
+            del products
 
             gc.collect()

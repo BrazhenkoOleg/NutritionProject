@@ -32,16 +32,6 @@ Thumbs.db
 tmp/
 temp/
 
-# ML training data and outputs
-ml_training/data/
-ml_training/runs/
-
-# Old ML dataset paths
-ml/data/dataset_nutrition/
-ml/data/split_dataset/
-ml/runs/
-runs/
-
 # YOLO / training artifacts
 *.pt
 *.pth
@@ -50,14 +40,7 @@ runs/
 *.torchscript
 *.tflite
 
-# Archives
-*.zip
-*.rar
-*.7z
-*.tar
-*.gz
+ml_training/runs/
 
-# Python
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
+ml_api/models/*.onnx
+!ml_api/models/.gitkeep

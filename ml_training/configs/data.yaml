@@ -1,0 +1,6 @@
+train: ../data/dataset_nutrition/train/images
+val: ../data/dataset_nutrition/valid/images
+test: ../data/dataset_nutrition/test/images
+
+nc: 53
+names: ['apple', 'avocado', 'bacon', 'bagel', 'banana', 'beef', 'bell pepper', 'blueberry', 'bread', 'broccoli', 'burger', 'cabbage', 'carrot', 'champignons', 'cheese', 'chicken', 'corn', 'cucumber', 'cutlet', 'dill', 'egg', 'french fries', 'garlic', 'grape', 'green beans', 'green peas', 'hot dog', 'kiwi', 'lemon', 'lettuce', 'lime', 'mashed potato', 'noodles', 'oatmeal', 'omelette', 'onion', 'orange', 'pancakes', 'parsley', 'pasta', 'pineapple', 'pizza', 'pork', 'potato', 'rice', 'salmon', 'sausages', 'shrimp', 'spinach', 'strawberry', 'toast', 'tomato', 'tuna']
