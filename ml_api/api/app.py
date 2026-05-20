@@ -4,6 +4,7 @@ import asyncio
 import gc
 import json
 import os
+from dotenv import load_dotenv
 
 import cv2
 import numpy as np
@@ -12,6 +13,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
 
+load_dotenv()
 
 ML_ROOT = Path(__file__).resolve().parents[1]
 
@@ -391,20 +393,23 @@ def health():
 def warmup():
     try:
         ort_session = get_session()
+        input_info = ort_session.get_inputs()[0]
 
         return {
             "status": "ok",
             "message": "Model loaded successfully",
             "model_file": MODEL_FILE,
             "model_path": session_model_path,
-            "input_name": ort_session.get_inputs()[0].name,
+            "input_name": input_info.name,
+            "input_shape": input_info.shape,
+            "input_type": input_info.type,
         }
     except Exception as error:
         print("Warmup error:", repr(error), flush=True)
 
         raise HTTPException(
             status_code=500,
-            detail="Не удалось загрузить модель",
+            detail=f"Warmup error: {repr(error)}",
         )
 
 

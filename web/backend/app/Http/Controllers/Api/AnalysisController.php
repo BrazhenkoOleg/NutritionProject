@@ -77,7 +77,7 @@ class AnalysisController extends Controller
                 return response()->json([
                     'status' => 'error',
                     'message' => 'ML service error',
-                    'user_message' => 'Сервис распознавания упал или вернул ошибку. Запись не создана.',
+                    'user_message' => 'Сервис распознавания временно недоступен. Запись не создана, попробуйте позже.',
                     'ml_status' => $response->status(),
                     'ml_json' => $response->json(),
                 ], 502);
@@ -93,6 +93,20 @@ class AnalysisController extends Controller
                     'message' => 'Invalid ML response',
                     'user_message' => 'Сервис распознавания вернул некорректный ответ. Запись не создана.',
                 ], 502);
+            }
+
+            $detectedProducts = collect($mlData['products'] ?? [])
+                ->filter(fn ($product) => !empty($product['class_name']))
+                ->values();
+
+            if ($detectedProducts->isEmpty()) {
+                $this->deleteStoredImage($path);
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No products detected',
+                    'user_message' => 'На фото не удалось распознать продукты. Запись не создана.',
+                ], 422);
             }
 
             $imageUrl = Storage::disk('public')->url($path);
@@ -111,15 +125,13 @@ class AnalysisController extends Controller
                 'note' => null,
             ]);
 
-            $productsForSync = collect($mlData['products'] ?? [])
-                ->filter(fn ($product) => !empty($product['class_name']))
+            $productsForSync = $detectedProducts
                 ->map(fn ($product) => [
                     'class_name' => $product['class_name'],
                     'weight_g' => 100,
                     'detected_count' => $product['count'] ?? null,
                     'max_confidence' => $product['max_confidence'] ?? null,
                 ])
-                ->values()
                 ->all();
 
             $this->syncAnalysisProducts($analysis, $productsForSync);

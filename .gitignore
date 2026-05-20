@@ -44,3 +44,5 @@ ml_training/runs/
 
 ml_api/models/*.onnx
 !ml_api/models/.gitkeep
+
+ml_api/.env

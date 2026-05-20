@@ -670,14 +670,15 @@ img {
   padding: 18px;
 }
 
-.dashboard-toolbar > div {
+.dashboard-toolbar > * {
   min-width: 0;
 }
 
 .date-control {
   display: grid;
   gap: 7px;
-  min-width: 220px;
+  min-width: 0;
+  max-width: 320px;
 }
 
 .date-input {
@@ -685,16 +686,16 @@ img {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-
   padding: 0 14px;
   border-radius: 14px;
   border: 1px solid var(--border);
-
   background: var(--surface);
   color: var(--text);
-
   outline: none;
+
+  -webkit-appearance: none;
   appearance: none;
+  box-sizing: border-box;
 }
 
 .date-input:focus {
@@ -1865,10 +1866,15 @@ button:active:not(:disabled) {
 
   .date-control {
     width: 100%;
-    min-width: 0;
+    max-width: none;
   }
 
   .date-input {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dashboard-toolbar .light-button {
     width: 100%;
   }
 

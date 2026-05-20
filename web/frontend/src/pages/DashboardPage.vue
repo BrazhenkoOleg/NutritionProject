@@ -236,7 +236,9 @@ const analysisToDelete = ref(null)
 
 const mlRequestInProgress = ref(false)
 const mlCooldownUntil = ref(null)
+
 const ML_COOLDOWN_MS = 8000
+const ML_WARMUP_TIMEOUT_MS = 10000
 
 let mlWarmupPromise = null
 
@@ -441,32 +443,70 @@ async function warmUpServices() {
   }
 
   try {
-    await warmUpMlOnly()
+    await warmUpMlOnly({
+      silent: true,
+      timeoutMs: ML_WARMUP_TIMEOUT_MS,
+    })
   } finally {
     isWarmingUp.value = false
   }
 }
 
-function warmUpMlOnly() {
+function warmUpMlOnly(options = {}) {
+  const {
+    silent = false,
+    timeoutMs = ML_WARMUP_TIMEOUT_MS,
+  } = options
+
   const mlUrl = import.meta.env.VITE_ML_URL
 
   if (!mlUrl) {
-    return null
+    if (silent) {
+      return Promise.resolve(null)
+    }
+
+    return Promise.reject(new Error('ML URL is not configured'))
   }
 
   if (!mlWarmupPromise) {
-    mlWarmupPromise = fetch(`${mlUrl}/health`)
-      .catch((error) => {
-        console.warn('ML warm-up failed', error)
-      })
+    mlWarmupPromise = requestMlWarmup(mlUrl, timeoutMs)
       .finally(() => {
-        setTimeout(() => {
+        window.setTimeout(() => {
           mlWarmupPromise = null
         }, 10000)
       })
   }
 
+  if (silent) {
+    return mlWarmupPromise.catch((error) => {
+      console.warn('ML warm-up failed', error)
+      return null
+    })
+  }
+
   return mlWarmupPromise
+}
+
+async function requestMlWarmup(mlUrl, timeoutMs) {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => {
+    controller.abort()
+  }, timeoutMs)
+
+  try {
+    const response = await fetch(`${mlUrl.replace(/\/$/, '')}/warmup`, {
+      method: 'POST',
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`ML warm-up failed with status ${response.status}`)
+    }
+
+    return response
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 }
 
 function handleFileChange(event, mealType) {
@@ -497,7 +537,11 @@ function handleFileChange(event, mealType) {
   mealPreviewUrls.value[mealType] = URL.createObjectURL(file)
 
   openMeal(mealType)
-  warmUpMlOnly()
+
+  warmUpMlOnly({
+    silent: true,
+    timeoutMs: ML_WARMUP_TIMEOUT_MS,
+  })
 }
 
 async function analyzeMealImage(mealType) {
@@ -519,15 +563,23 @@ async function analyzeMealImage(mealType) {
   }
 
   const previewUrl = mealPreviewUrls.value[mealType]
-  const pendingId = addPendingAnalysis(mealType, previewUrl)
 
-  openMeal(mealType)
+  let pendingId = null
 
   isLoading.value = true
   uploadMealType.value = mealType
   mlRequestInProgress.value = true
 
   try {
+    await warmUpMlOnly({
+      silent: false,
+      timeoutMs: ML_WARMUP_TIMEOUT_MS,
+    })
+
+    pendingId = addPendingAnalysis(mealType, previewUrl)
+
+    openMeal(mealType)
+
     updatePendingAnalysis(pendingId, {
       progress_step: 'compressing',
     })
@@ -537,8 +589,6 @@ async function analyzeMealImage(mealType) {
     updatePendingAnalysis(pendingId, {
       progress_step: 'uploading',
     })
-
-    await warmUpMlOnly()
 
     const formData = new FormData()
     formData.append('image', compressedFile)
@@ -559,6 +609,7 @@ async function analyzeMealImage(mealType) {
     await fetchAnalyses()
 
     removePendingAnalysis(pendingId)
+    pendingId = null
 
     mealUploadFiles.value[mealType] = null
 
@@ -579,7 +630,9 @@ async function analyzeMealImage(mealType) {
   } catch (error) {
     console.error(error)
 
-    removePendingAnalysis(pendingId)
+    if (pendingId) {
+      removePendingAnalysis(pendingId)
+    }
 
     toastStore.error(getFriendlyErrorMessage(error))
   } finally {
@@ -681,7 +734,7 @@ function getCompressedFileName(originalName) {
 
 function addPendingAnalysis(mealType, previewUrl) {
   const pending = {
-    id: `pending-${Date.now()}`,
+    id: `pending-${Date.now()}-${Math.random()}`,
     meal_type: mealType,
     entry_date: selectedDate.value,
     image_url: previewUrl,
@@ -737,20 +790,44 @@ function startMlCooldown() {
 function getFriendlyErrorMessage(error) {
   const data = error.response?.data
 
+  if (error?.name === 'AbortError') {
+    return 'Сервис распознавания не отвечает. Запись не создана, попробуйте позже.'
+  }
+
+  if (error?.message?.includes('ML warm-up failed')) {
+    return 'Сервис распознавания временно недоступен. Запись не создана, попробуйте позже.'
+  }
+
+  if (error?.message === 'ML URL is not configured') {
+    return 'Адрес сервиса распознавания не настроен.'
+  }
+
   if (!data) {
     return 'Не удалось выполнить запрос. Проверьте подключение к интернету.'
   }
 
+  if (data.user_message) {
+    return stripHtml(data.user_message)
+  }
+
+  if (data.message === 'No products detected') {
+    return 'На фото не удалось распознать продукты. Запись не создана.'
+  }
+
   if (data.message === 'ML service busy') {
-    return data.user_message || 'AI-сервис занят. Повторите попытку через несколько секунд.'
+    return 'AI-сервис занят. Повторите попытку через несколько секунд.'
   }
 
   if (data.message === 'ML service connection error') {
-    return 'Сервис распознавания запускается. Подождите немного и повторите попытку.'
+    return 'Сервис распознавания запускается или временно недоступен. Запись не создана.'
   }
 
   if (data.message === 'ML service error') {
-    return data.user_message || 'Сервис распознавания временно недоступен. Запись не создана, попробуйте позже.'
+    return 'Сервис распознавания временно недоступен. Запись не создана, попробуйте позже.'
+  }
+
+  if (error.response?.status === 413) {
+    return 'Файл слишком большой. Выберите изображение меньшего размера.'
   }
 
   if (data.errors) {
