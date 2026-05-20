@@ -41,7 +41,6 @@ class AnalysisController extends Controller
 
         try {
             $path = $request->file('image')->store('analyses', 'public');
-            $imageUrl = Storage::disk('public')->url($path);
 
             try {
                 $response = Http::connectTimeout(10)
@@ -51,15 +50,14 @@ class AnalysisController extends Controller
                         file_get_contents($request->file('image')->getRealPath()),
                         $request->file('image')->getClientOriginalName()
                     )
-                    ->post(config('services.ml.url') . '/predict');
+                    ->post(rtrim(config('services.ml.url'), '/') . '/predict');
             } catch (ConnectionException $error) {
                 $this->deleteStoredImage($path);
 
                 return response()->json([
                     'status' => 'error',
                     'message' => 'ML service connection error',
-                    'user_message' => 'Сервис распознавания запускается или временно недоступен. Повторите попытку через минуту.',
-                    'details' => $error->getMessage(),
+                    'user_message' => 'Сервис распознавания запускается или временно недоступен. Запись не создана.',
                 ], 502);
             }
 
@@ -69,7 +67,7 @@ class AnalysisController extends Controller
                 return response()->json([
                     'status' => 'error',
                     'message' => 'ML service busy',
-                    'user_message' => 'AI-сервис уже анализирует изображение. Попробуйте ещё раз через несколько секунд.',
+                    'user_message' => 'AI-сервис уже обрабатывает другое изображение. Запись не создана.',
                 ], 429);
             }
 
@@ -79,24 +77,25 @@ class AnalysisController extends Controller
                 return response()->json([
                     'status' => 'error',
                     'message' => 'ML service error',
-                    'user_message' => 'Сервис распознавания временно недоступен. Попробуйте повторить анализ через несколько секунд.',
+                    'user_message' => 'Сервис распознавания упал или вернул ошибку. Запись не создана.',
                     'ml_status' => $response->status(),
-                    'ml_body' => strip_tags($response->body()),
                     'ml_json' => $response->json(),
                 ], 502);
             }
 
             $mlData = $response->json();
 
-            if (!is_array($mlData)) {
+            if (!is_array($mlData) || ($mlData['status'] ?? null) !== 'ok') {
                 $this->deleteStoredImage($path);
 
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Invalid ML response',
-                    'user_message' => 'Сервис распознавания вернул некорректный ответ. Попробуйте ещё раз.',
+                    'user_message' => 'Сервис распознавания вернул некорректный ответ. Запись не создана.',
                 ], 502);
             }
+
+            $imageUrl = Storage::disk('public')->url($path);
 
             $analysis = Analysis::create([
                 'user_id' => $request->user()->id,
@@ -142,7 +141,7 @@ class AnalysisController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Analysis creation error',
-                'user_message' => 'Не удалось создать анализ. Попробуйте ещё раз.',
+                'user_message' => 'Не удалось создать анализ. Запись не создана.',
             ], 500);
         }
     }

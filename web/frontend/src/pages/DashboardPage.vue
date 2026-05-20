@@ -84,7 +84,7 @@
         </div>
 
         <section class="dashboard-toolbar card">
-          <div>
+          <div class="date-control">
             <span class="section-label">Дата дневника</span>
             <input
               v-model="selectedDate"
@@ -556,16 +556,16 @@ async function analyzeMealImage(mealType) {
       progress_step: 'finalizing',
     })
 
+    await fetchAnalyses()
+
+    removePendingAnalysis(pendingId)
+
     mealUploadFiles.value[mealType] = null
 
     if (mealPreviewUrls.value[mealType]) {
       URL.revokeObjectURL(mealPreviewUrls.value[mealType])
       mealPreviewUrls.value[mealType] = null
     }
-
-    await fetchAnalyses()
-
-    removePendingAnalysis(pendingId)
 
     const freshAnalysis = analyses.value.find((item) => item.id === createdAnalysis?.id)
 
@@ -579,10 +579,7 @@ async function analyzeMealImage(mealType) {
   } catch (error) {
     console.error(error)
 
-    updatePendingAnalysis(pendingId, {
-      status: 'failed',
-      progress_step: 'failed',
-    })
+    removePendingAnalysis(pendingId)
 
     toastStore.error(getFriendlyErrorMessage(error))
   } finally {
@@ -753,7 +750,7 @@ function getFriendlyErrorMessage(error) {
   }
 
   if (data.message === 'ML service error') {
-    return 'Сервис распознавания временно недоступен. Фото не потеряно — попробуйте повторить анализ через несколько секунд.'
+    return data.user_message || 'Сервис распознавания временно недоступен. Запись не создана, попробуйте позже.'
   }
 
   if (data.errors) {

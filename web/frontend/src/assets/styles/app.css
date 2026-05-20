@@ -663,11 +663,43 @@ img {
 }
 
 .dashboard-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  justify-content: space-between;
   gap: 14px;
   padding: 18px;
+}
+
+.dashboard-toolbar > div {
+  min-width: 0;
+}
+
+.date-control {
+  display: grid;
+  gap: 7px;
+  min-width: 220px;
+}
+
+.date-input {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+
+  background: var(--surface);
+  color: var(--text);
+
+  outline: none;
+  appearance: none;
+}
+
+.date-input:focus {
+  border-color: var(--success);
+  box-shadow: 0 0 0 4px var(--success-bg);
 }
 
 /* Daily Summary */
@@ -1818,13 +1850,26 @@ button:active:not(:disabled) {
     align-items: flex-start;
   }
 
-  .dashboard-toolbar,
   .daily-summary-header,
   .section-header,
   .meal-toggle,
   .meal-analysis-top {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .dashboard-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .date-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .date-input {
+    width: 100%;
   }
 
   .dashboard-hero {
