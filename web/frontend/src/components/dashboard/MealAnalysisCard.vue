@@ -5,8 +5,8 @@
   >
     <div class="pending-image">
       <img
-        v-if="analysis.image_url"
-        :src="analysis.image_url"
+        v-if="getPreviewImageUrl(analysis)"
+        :src="getPreviewImageUrl(analysis)"
         alt="Фото блюда"
       />
 
@@ -55,11 +55,11 @@
     class="meal-analysis-card"
   >
     <div
-      v-if="analysis.image_url"
+      v-if="getAnalysisImageUrl(analysis)"
       class="meal-analysis-image"
     >
       <img
-        :src="analysis.image_url"
+        :src="getAnalysisImageUrl(analysis)"
         alt="Фото анализа"
       />
     </div>
@@ -83,9 +83,9 @@
 
         <div class="meal-analysis-actions">
           <a
-            v-if="analysis.image_url"
+            v-if="getAnalysisImageUrl(analysis)"
             class="image-link"
-            :href="analysis.image_url"
+            :href="getAnalysisImageUrl(analysis)"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -171,7 +171,7 @@
         >
           <div>
             <strong>{{ product.name_ru || product.class_name }}</strong>
-            <span>{{ formatNumber(product.weight_g || 0) }} г</span>
+            <span>{{ formatWeight(product.weight_g) }} г</span>
           </div>
 
           <span>{{ Math.round(product.total_kcal || 0) }} ккал</span>
@@ -190,6 +190,7 @@
 
 <script setup>
 import { computed } from 'vue'
+
 import IconResolver from '../ui/IconResolver.vue'
 import ProductEditor from './ProductEditor.vue'
 
@@ -228,6 +229,38 @@ const totals = computed(() => {
   return getAnalysisTotals(props.analysis)
 })
 
+function getPreviewImageUrl(analysis) {
+  const imageUrl = String(analysis?.image_url || '').trim()
+
+  if (!imageUrl) {
+    return null
+  }
+
+  if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
+    return imageUrl
+  }
+
+  return getAnalysisImageUrl(analysis)
+}
+
+function getAnalysisImageUrl(analysis) {
+  const imageUrl = String(analysis?.image_url || '').trim()
+
+  if (!imageUrl) {
+    return null
+  }
+
+  if (isOldStorageImageUrl(imageUrl)) {
+    return null
+  }
+
+  return imageUrl
+}
+
+function isOldStorageImageUrl(url) {
+  return url.includes('/storage/')
+}
+
 function getAnalysisTotals(analysis) {
   if (!analysis.products?.length) {
     return {
@@ -257,6 +290,10 @@ function getAnalysisTotals(analysis) {
 }
 
 function formatNumber(value) {
+  return Math.round(Number(value || 0))
+}
+
+function formatWeight(value) {
   return Math.round(Number(value || 0))
 }
 
