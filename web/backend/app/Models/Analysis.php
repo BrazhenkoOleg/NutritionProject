@@ -13,6 +13,7 @@ class Analysis extends Model
         'entry_date',
         'image_path',
         'image_url',
+        'image_public_id',
         'status',
         'detections_count',
         'products_count',

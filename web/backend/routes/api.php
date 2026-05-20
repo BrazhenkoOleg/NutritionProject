@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\AnalysisController;
+use App\Http\Controllers\Api\AnalysisProductController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ImageAnalysisController;
+use App\Http\Controllers\Api\ManualAnalysisController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -25,8 +28,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/products', [ProductController::class, 'index']);
 
     Route::get('/analyses', [AnalysisController::class, 'index']);
-    Route::post('/analyze', [AnalysisController::class, 'store']);
-    Route::post('/analyses/manual', [AnalysisController::class, 'storeManual']);
-    Route::put('/analyses/{analysis}/products', [AnalysisController::class, 'updateProducts']);
     Route::delete('/analyses/{analysis}', [AnalysisController::class, 'destroy']);
+
+    Route::post('/analyze', [ImageAnalysisController::class, 'store']);
+    Route::post('/analyses/manual', [ManualAnalysisController::class, 'store']);
+    Route::put('/analyses/{analysis}/products', [AnalysisProductController::class, 'update']);
 });

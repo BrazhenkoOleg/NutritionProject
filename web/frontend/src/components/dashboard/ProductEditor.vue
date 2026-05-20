@@ -1,4 +1,6 @@
 <script setup>
+import { ref, watch } from 'vue'
+
 const props = defineProps({
   editableProducts: {
     type: Array,
@@ -19,6 +21,79 @@ const emit = defineEmits([
   'save',
   'cancel',
 ])
+
+const activeSearchIndex = ref(null)
+
+function getProductLabel(product) {
+  if (!product) {
+    return ''
+  }
+
+  const name = String(product.name_ru || '').trim()
+  const className = String(product.class_name || '').trim()
+
+  return name || className
+}
+
+function findProductByClassName(className) {
+  if (!className) {
+    return null
+  }
+
+  return props.allProducts.find((product) => product.class_name === className) || null
+}
+
+function normalizeSelectedProducts() {
+  let changed = false
+
+  const nextProducts = props.editableProducts.map((product, index) => {
+    if (activeSearchIndex.value === index) {
+      return product
+    }
+
+    if (!product.class_name) {
+      return product
+    }
+
+    const catalogProduct = findProductByClassName(product.class_name)
+
+    if (!catalogProduct) {
+      return product
+    }
+
+    const label = getProductLabel(catalogProduct)
+
+    if (product.query === label) {
+      return product
+    }
+
+    changed = true
+
+    return {
+      ...product,
+      query: label,
+      class_name: catalogProduct.class_name,
+    }
+  })
+
+  if (changed) {
+    emit('update:editableProducts', nextProducts)
+  }
+}
+
+watch(
+  () => props.allProducts,
+  normalizeSelectedProducts,
+  {
+    immediate: true,
+    deep: true,
+  },
+)
+
+watch(
+  () => props.editableProducts.length,
+  normalizeSelectedProducts,
+)
 
 function getFilteredProducts(query) {
   if (!query) {
@@ -53,6 +128,8 @@ function updateProduct(index, field, value) {
 }
 
 function updateQuery(index, value) {
+  activeSearchIndex.value = index
+
   const nextProducts = props.editableProducts.map((product, productIndex) => {
     if (productIndex !== index) {
       return product
@@ -77,14 +154,17 @@ function selectProduct(index, selectedProduct) {
     return {
       ...product,
       class_name: selectedProduct.class_name,
-      query: `${selectedProduct.name_ru} — ${selectedProduct.class_name}`,
+      query: getProductLabel(selectedProduct),
     }
   })
 
+  activeSearchIndex.value = null
   emit('update:editableProducts', nextProducts)
 }
 
 function addProductRow() {
+  activeSearchIndex.value = props.editableProducts.length
+
   emit('update:editableProducts', [
     ...props.editableProducts,
     {
@@ -100,6 +180,30 @@ function removeProductRow(index) {
     'update:editableProducts',
     props.editableProducts.filter((_, productIndex) => productIndex !== index),
   )
+
+  if (activeSearchIndex.value === index) {
+    activeSearchIndex.value = null
+  }
+}
+
+function shouldShowSearchResults(product, index) {
+  return (
+    activeSearchIndex.value === index &&
+    Boolean(product.query) &&
+    !product.class_name
+  )
+}
+
+function handleFocus(index, product) {
+  if (!product.class_name) {
+    activeSearchIndex.value = index
+  }
+}
+
+function handleBlur() {
+  window.setTimeout(() => {
+    activeSearchIndex.value = null
+  }, 150)
 }
 </script>
 
@@ -125,11 +229,13 @@ function removeProductRow(index) {
             :value="product.query"
             type="text"
             placeholder="Начните вводить название продукта"
+            @focus="handleFocus(index, product)"
+            @blur="handleBlur"
             @input="updateQuery(index, $event.target.value)"
           />
 
           <div
-            v-if="product.query && !product.class_name"
+            v-if="shouldShowSearchResults(product, index)"
             class="search-results"
           >
             <button
@@ -137,9 +243,9 @@ function removeProductRow(index) {
               :key="item.class_name"
               type="button"
               class="search-result-item"
-              @click="selectProduct(index, item)"
+              @mousedown.prevent="selectProduct(index, item)"
             >
-              {{ item.name_ru }} — {{ item.class_name }}
+              {{ getProductLabel(item) }}
             </button>
 
             <p
@@ -155,7 +261,7 @@ function removeProductRow(index) {
           <label>Масса, г</label>
 
           <input
-            :value="product.weight_g"
+            :value="Math.round(Number(product.weight_g || 0))"
             type="number"
             min="1"
             step="1"

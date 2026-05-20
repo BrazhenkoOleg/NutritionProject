@@ -2,44 +2,36 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Requests\Analysis\UpdateAnalysisProductsRequest;
 use App\Http\Resources\AnalysisResource;
 use App\Models\Analysis;
 use App\Services\Analysis\AnalysisService;
 use App\Services\Analysis\AnalysisServiceException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
-class AnalysisController extends ApiController
+class AnalysisProductController extends ApiController
 {
     public function __construct(
         private readonly AnalysisService $analysisService,
     ) {
     }
 
-    public function index(Request $request): JsonResponse
-    {
-        $analyses = Analysis::query()
-            ->where('user_id', $request->user()->id)
-            ->with(['analysisProducts.product'])
-            ->latest('entry_date')
-            ->latest('created_at')
-            ->get();
-
-        return $this->success([
-            'data' => AnalysisResource::collection($analyses),
-        ]);
-    }
-
-    public function destroy(Request $request, Analysis $analysis): JsonResponse
+    public function update(UpdateAnalysisProductsRequest $request, Analysis $analysis): JsonResponse
     {
         try {
-            $this->authorize('delete', $analysis);
+            $this->authorize('update', $analysis);
 
-            $this->analysisService->delete($analysis);
+            $data = $request->validated();
+
+            $updatedAnalysis = $this->analysisService->updateProducts(
+                analysis: $analysis,
+                products: $data['products'],
+            );
 
             return $this->success([
-                'message' => 'Analysis deleted successfully',
+                'message' => 'Analysis products updated successfully',
+                'data' => new AnalysisResource($updatedAnalysis),
             ]);
         } catch (AuthorizationException) {
             return $this->error(
@@ -53,8 +45,8 @@ class AnalysisController extends ApiController
             report($error);
 
             return $this->error(
-                message: 'Analysis deletion error',
-                userMessage: 'Не удалось удалить запись.',
+                message: 'Analysis products update error',
+                userMessage: 'Не удалось обновить продукты записи.',
                 status: 500,
             );
         }

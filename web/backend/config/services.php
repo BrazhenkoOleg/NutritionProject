@@ -35,6 +35,10 @@ return [
         ],
     ],
 
+    'cloudinary' => [
+        'url' => env('CLOUDINARY_URL'),
+    ],
+
     'ml' => [
         'url' => env('ML_API_URL', 'http://127.0.0.1:8001'),
     ],

@@ -257,7 +257,7 @@ function getAnalysisTotals(analysis) {
 }
 
 function formatNumber(value) {
-  return Number(value || 0).toFixed(1)
+  return Math.round(Number(value || 0))
 }
 
 function formatTime(value) {

@@ -219,6 +219,9 @@ const isInitialLoading = ref(true)
 const isWarmingUp = ref(false)
 const isLoading = ref(false)
 
+const savingAnalysisId = ref(null)
+const deletingAnalysisId = ref(null)
+
 const analyses = ref([])
 const pendingAnalyses = ref([])
 const allProducts = ref([])
@@ -228,6 +231,7 @@ const selectedDate = ref(getTodayDate())
 const uploadMealType = ref(null)
 const editingAnalysisId = ref(null)
 const editableProducts = ref([])
+const originalEditableProducts = ref([])
 
 const manualMealType = ref(null)
 const manualProducts = ref([])
@@ -348,6 +352,7 @@ const dailyTotals = computed(() => {
 watch(selectedDate, () => {
   editingAnalysisId.value = null
   editableProducts.value = []
+  originalEditableProducts.value = []
   manualMealType.value = null
   manualProducts.value = []
 })
@@ -431,6 +436,35 @@ async function fetchProducts() {
 async function fetchAnalyses() {
   const response = await api.get('/analyses')
   analyses.value = response.data.data || []
+}
+
+function upsertAnalysis(updatedAnalysis) {
+  if (!updatedAnalysis?.id) {
+    return
+  }
+
+  const exists = analyses.value.some((analysis) => analysis.id === updatedAnalysis.id)
+
+  if (exists) {
+    analyses.value = analyses.value.map((analysis) => {
+      if (analysis.id !== updatedAnalysis.id) {
+        return analysis
+      }
+
+      return updatedAnalysis
+    })
+
+    return
+  }
+
+  analyses.value = [
+    updatedAnalysis,
+    ...analyses.value,
+  ]
+}
+
+function removeAnalysisFromList(analysisId) {
+  analyses.value = analyses.value.filter((analysis) => analysis.id !== analysisId)
 }
 
 async function warmUpServices() {
@@ -606,10 +640,12 @@ async function analyzeMealImage(mealType) {
       progress_step: 'finalizing',
     })
 
-    await fetchAnalyses()
-
     removePendingAnalysis(pendingId)
     pendingId = null
+
+    if (createdAnalysis) {
+      upsertAnalysis(createdAnalysis)
+    }
 
     mealUploadFiles.value[mealType] = null
 
@@ -618,11 +654,9 @@ async function analyzeMealImage(mealType) {
       mealPreviewUrls.value[mealType] = null
     }
 
-    const freshAnalysis = analyses.value.find((item) => item.id === createdAnalysis?.id)
-
-    if (freshAnalysis) {
+    if (createdAnalysis) {
       openMeal(mealType)
-      startEditProducts(freshAnalysis)
+      startEditProducts(createdAnalysis)
       toastStore.success('Фото распознано. Уточните вес порции.')
     } else {
       toastStore.success('Фото добавлено в дневник.')
@@ -913,6 +947,7 @@ function startManualMealEntry(mealType) {
   manualMealType.value = mealType
   editingAnalysisId.value = null
   editableProducts.value = []
+  originalEditableProducts.value = []
 
   manualProducts.value = [
     {
@@ -947,19 +982,24 @@ async function saveManualMealEntry() {
   isLoading.value = true
 
   try {
-    await api.post('/analyses/manual', {
+    const response = await api.post('/analyses/manual', {
       meal_type: manualMealType.value,
       entry_date: selectedDate.value,
       products: validProducts.map((product) => ({
         class_name: product.class_name,
-        weight_g: Number(product.weight_g),
+        weight_g: Math.round(Number(product.weight_g || 100)),
       })),
     })
 
+    const createdAnalysis = response.data.data
+
+    if (createdAnalysis) {
+      upsertAnalysis(createdAnalysis)
+      openMeal(createdAnalysis.meal_type)
+    }
+
     manualMealType.value = null
     manualProducts.value = []
-
-    await fetchAnalyses()
 
     toastStore.success('Ручная запись добавлена.')
   } catch (error) {
@@ -972,17 +1012,129 @@ async function saveManualMealEntry() {
 
 function startEditProducts(analysis) {
   editingAnalysisId.value = analysis.id
+  manualMealType.value = null
+  manualProducts.value = []
 
-  editableProducts.value = (analysis.products || []).map((product) => ({
-    class_name: product.class_name,
-    query: product.name_ru || product.class_name,
-    weight_g: product.weight_g || 100,
-  }))
+  const productsForEdit = (analysis.products || []).map((product) => {
+    const catalogProduct = allProducts.value.find((item) => {
+      return item.class_name === product.class_name
+    })
+
+    const className = catalogProduct?.class_name || product.class_name || ''
+    const name = catalogProduct?.name_ru || product.name_ru || className || 'Продукт'
+
+    return {
+      class_name: className,
+      query: formatProductQuery(name, className),
+      weight_g: Math.round(Number(product.weight_g || 100)),
+    }
+  })
+
+  editableProducts.value = productsForEdit
+  originalEditableProducts.value = productsForEdit.map((product) => ({ ...product }))
+}
+
+function formatProductQuery(name, className = '') {
+  const cleanName = String(name || '').trim()
+  const cleanClassName = String(className || '').trim()
+
+  return cleanName || cleanClassName || ''
 }
 
 function cancelEditProducts() {
   editingAnalysisId.value = null
   editableProducts.value = []
+  originalEditableProducts.value = []
+}
+
+function normalizeProductsForCompare(products) {
+  return getValidEditableProducts(products)
+    .sort((a, b) => a.class_name.localeCompare(b.class_name))
+}
+
+function getProductsChangeType(beforeProducts, afterProducts) {
+  const before = normalizeProductsForCompare(beforeProducts)
+  const after = normalizeProductsForCompare(afterProducts)
+
+  const beforeMap = new Map(before.map((product) => [product.class_name, product.weight_g]))
+  const afterMap = new Map(after.map((product) => [product.class_name, product.weight_g]))
+
+  const beforeClasses = [...beforeMap.keys()]
+  const afterClasses = [...afterMap.keys()]
+
+  const sameLength = beforeClasses.length === afterClasses.length
+  const sameClasses = sameLength && beforeClasses.every((className) => afterMap.has(className))
+
+  if (!sameClasses) {
+    return 'composition'
+  }
+
+  const weightChanged = beforeClasses.some((className) => {
+    return beforeMap.get(className) !== afterMap.get(className)
+  })
+
+  if (weightChanged) {
+    return 'weight'
+  }
+
+  return 'none'
+}
+
+function getEditSuccessMessage(changeType) {
+  if (changeType === 'composition') {
+    return 'Состав продуктов обновлён.'
+  }
+
+  if (changeType === 'weight') {
+    return 'Вес порции обновлён.'
+  }
+
+  return 'Изменения сохранены.'
+}
+
+function findProductByQuery(query) {
+  const cleanQuery = String(query || '').trim().toLowerCase()
+
+  if (!cleanQuery) {
+    return null
+  }
+
+  return allProducts.value.find((product) => {
+    const name = String(product.name_ru || '').trim().toLowerCase()
+    const className = String(product.class_name || '').trim().toLowerCase()
+
+    return cleanQuery === name || cleanQuery === className
+  }) || null
+}
+
+function normalizeEditableProduct(product) {
+  const className = String(product.class_name || '').trim()
+
+  if (className) {
+    return {
+      class_name: className,
+      weight_g: Math.round(Number(product.weight_g || 100)),
+    }
+  }
+
+  const matchedProduct = findProductByQuery(product.query)
+
+  if (!matchedProduct?.class_name) {
+    return null
+  }
+
+  return {
+    class_name: matchedProduct.class_name,
+    weight_g: Math.round(Number(product.weight_g || 100)),
+  }
+}
+
+function getValidEditableProducts(products) {
+  return products
+    .map((product) => normalizeEditableProduct(product))
+    .filter((product) => {
+      return product?.class_name && Number(product.weight_g) > 0
+    })
 }
 
 async function saveEditedProducts() {
@@ -990,36 +1142,52 @@ async function saveEditedProducts() {
     return
   }
 
-  const validProducts = editableProducts.value.filter((product) => {
-    return product.class_name && Number(product.weight_g) > 0
-  })
+  const analysisId = editingAnalysisId.value
+  const validProducts = getValidEditableProducts(editableProducts.value)
 
   if (validProducts.length === 0) {
     toastStore.info('Добавьте хотя бы один продукт и укажите массу.')
     return
   }
 
+  const changeType = getProductsChangeType(
+    originalEditableProducts.value,
+    editableProducts.value,
+  )
+
+  if (changeType === 'none') {
+    toastStore.info('Изменений нет.')
+    return
+  }
+
   isLoading.value = true
+  savingAnalysisId.value = analysisId
 
   try {
-    await api.put(`/analyses/${editingAnalysisId.value}/products`, {
+    const response = await api.put(`/analyses/${analysisId}/products`, {
       products: validProducts.map((product) => ({
         class_name: product.class_name,
-        weight_g: Number(product.weight_g),
+        weight_g: Math.round(Number(product.weight_g || 100)),
       })),
     })
 
+    const updatedAnalysis = response.data.data
+
+    if (updatedAnalysis) {
+      upsertAnalysis(updatedAnalysis)
+    }
+
     editingAnalysisId.value = null
     editableProducts.value = []
+    originalEditableProducts.value = []
 
-    await fetchAnalyses()
-
-    toastStore.success('Вес порции обновлён.')
+    toastStore.success(getEditSuccessMessage(changeType))
   } catch (error) {
     console.error(error)
     toastStore.error(getFriendlyErrorMessage(error))
   } finally {
     isLoading.value = false
+    savingAnalysisId.value = null
   }
 }
 
@@ -1047,6 +1215,7 @@ async function confirmDeleteAnalysis() {
   const analysis = analysisToDelete.value
 
   isLoading.value = true
+  deletingAnalysisId.value = analysis.id
 
   try {
     await api.delete(`/analyses/${analysis.id}`)
@@ -1055,9 +1224,9 @@ async function confirmDeleteAnalysis() {
       cancelEditProducts()
     }
 
-    analysisToDelete.value = null
+    removeAnalysisFromList(analysis.id)
 
-    await fetchAnalyses()
+    analysisToDelete.value = null
 
     toastStore.success('Запись удалена.')
   } catch (error) {
@@ -1065,6 +1234,7 @@ async function confirmDeleteAnalysis() {
     toastStore.error(getFriendlyErrorMessage(error))
   } finally {
     isLoading.value = false
+    deletingAnalysisId.value = null
   }
 }
 </script>
