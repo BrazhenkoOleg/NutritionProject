@@ -1,6 +1,14 @@
 <script setup>
 import { ref, watch } from 'vue'
 
+import {
+  createEmptyEditableProduct,
+  filterProducts,
+  findProductByClassName,
+  getProductLabel,
+  normalizeProductWeight,
+} from '../../utils/products'
+
 const props = defineProps({
   editableProducts: {
     type: Array,
@@ -24,24 +32,19 @@ const emit = defineEmits([
 
 const activeSearchIndex = ref(null)
 
-function getProductLabel(product) {
-  if (!product) {
-    return ''
-  }
+watch(
+  () => props.allProducts,
+  normalizeSelectedProducts,
+  {
+    immediate: true,
+    deep: true,
+  },
+)
 
-  const name = String(product.name_ru || '').trim()
-  const className = String(product.class_name || '').trim()
-
-  return name || className
-}
-
-function findProductByClassName(className) {
-  if (!className) {
-    return null
-  }
-
-  return props.allProducts.find((product) => product.class_name === className) || null
-}
+watch(
+  () => props.editableProducts.length,
+  normalizeSelectedProducts,
+)
 
 function normalizeSelectedProducts() {
   let changed = false
@@ -55,7 +58,10 @@ function normalizeSelectedProducts() {
       return product
     }
 
-    const catalogProduct = findProductByClassName(product.class_name)
+    const catalogProduct = findProductByClassName(
+      props.allProducts,
+      product.class_name,
+    )
 
     if (!catalogProduct) {
       return product
@@ -81,35 +87,8 @@ function normalizeSelectedProducts() {
   }
 }
 
-watch(
-  () => props.allProducts,
-  normalizeSelectedProducts,
-  {
-    immediate: true,
-    deep: true,
-  },
-)
-
-watch(
-  () => props.editableProducts.length,
-  normalizeSelectedProducts,
-)
-
 function getFilteredProducts(query) {
-  if (!query) {
-    return props.allProducts.slice(0, 8)
-  }
-
-  const search = query.toLowerCase().trim()
-
-  return props.allProducts
-    .filter((product) => {
-      return (
-        product.name_ru?.toLowerCase().includes(search) ||
-        product.class_name?.toLowerCase().includes(search)
-      )
-    })
-    .slice(0, 8)
+  return filterProducts(props.allProducts, query)
 }
 
 function updateProduct(index, field, value) {
@@ -167,18 +146,16 @@ function addProductRow() {
 
   emit('update:editableProducts', [
     ...props.editableProducts,
-    {
-      class_name: '',
-      query: '',
-      weight_g: 100,
-    },
+    createEmptyEditableProduct(),
   ])
 }
 
 function removeProductRow(index) {
   emit(
     'update:editableProducts',
-    props.editableProducts.filter((_, productIndex) => productIndex !== index),
+    props.editableProducts.filter((_, productIndex) => {
+      return productIndex !== index
+    }),
   )
 
   if (activeSearchIndex.value === index) {
@@ -261,7 +238,7 @@ function handleBlur() {
           <label>Масса, г</label>
 
           <input
-            :value="Math.round(Number(product.weight_g || 0))"
+            :value="normalizeProductWeight(product.weight_g)"
             type="number"
             min="1"
             step="1"

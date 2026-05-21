@@ -31,6 +31,9 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
+import { RouterView } from 'vue-router'
+
+import { useTheme } from './composables/useTheme'
 import { useAuthStore } from './stores/auth'
 
 import IconResolver from './components/ui/IconResolver.vue'
@@ -38,12 +41,16 @@ import ToastContainer from './components/ui/ToastContainer.vue'
 
 const authStore = useAuthStore()
 
+const {
+  theme,
+  applyTheme,
+} = useTheme()
+
 const isAppPreparing = computed(() => {
-  return authStore.token && !authStore.isAuthReady && !authStore.user
+  return Boolean(authStore.token && !authStore.isAuthReady)
 })
 
 onMounted(() => {
-  const savedTheme = localStorage.getItem('theme') || 'light'
-  document.documentElement.setAttribute('data-theme', savedTheme)
+  applyTheme(theme.value)
 })
 </script>

@@ -22,22 +22,22 @@
       <div class="meal-inline-totals">
         <div class="meal-kbju-preview">
           <div class="meal-kbju-main">
-            <strong>{{ Math.round(totals.kcal || 0) }}</strong>
+            <strong>{{ formatCalories(totals.kcal) }}</strong>
             <span>ккал</span>
           </div>
 
           <div>
-            <strong>{{ formatNumber(totals.protein) }}</strong>
+            <strong>{{ formatMacroPrecise(totals.protein) }}</strong>
             <span>Б, г</span>
           </div>
 
           <div>
-            <strong>{{ formatNumber(totals.fat) }}</strong>
+            <strong>{{ formatMacroPrecise(totals.fat) }}</strong>
             <span>Ж, г</span>
           </div>
 
           <div>
-            <strong>{{ formatNumber(totals.carbs) }}</strong>
+            <strong>{{ formatMacroPrecise(totals.carbs) }}</strong>
             <span>У, г</span>
           </div>
         </div>
@@ -127,14 +127,15 @@
 </template>
 
 <script setup>
+import {
+  formatCalories,
+  formatMacroPrecise,
+} from '../../utils/formatters'
+
 import IconResolver from '../ui/IconResolver.vue'
 import MealUploadPanel from './MealUploadPanel.vue'
 import MealAnalysisCard from './MealAnalysisCard.vue'
 import ProductEditor from './ProductEditor.vue'
-
-function formatNumber(value) {
-  return Number(value || 0).toFixed(1)
-}
 
 defineProps({
   meal: {

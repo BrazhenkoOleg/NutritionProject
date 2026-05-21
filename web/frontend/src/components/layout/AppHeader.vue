@@ -1,7 +1,7 @@
 <template>
   <header class="site-header">
     <RouterLink
-      to="/dashboard"
+      :to="brandLink"
       class="site-brand"
     >
       <div class="site-brand-mark">
@@ -17,36 +17,32 @@
       </div>
     </RouterLink>
 
-    <nav class="site-nav">
-      <RouterLink
-        v-if="authStore.token"
-        to="/dashboard"
-      >
+    <nav
+      v-if="isAuthenticated"
+      class="site-nav"
+    >
+      <RouterLink to="/dashboard">
         Дневник
       </RouterLink>
 
-      <RouterLink
-        v-if="authStore.token"
-        to="/profile"
-      >
+      <RouterLink to="/profile">
         Профиль
       </RouterLink>
 
       <button
-        v-if="authStore.token"
         type="button"
         class="ghost-nav-button"
         @click="$emit('toggle-theme')"
       >
         <IconResolver
-          :name="theme === 'dark' ? 'Sun' : 'Moon'"
+          :name="themeIcon"
           :size="17"
         />
-        <span>{{ theme === 'dark' ? 'Светлая' : 'Тёмная' }}</span>
+
+        <span>{{ themeLabel }}</span>
       </button>
 
       <button
-        v-if="authStore.token"
         type="button"
         class="ghost-nav-button"
         @click="$emit('logout')"
@@ -55,6 +51,7 @@
           name="LogOut"
           :size="17"
         />
+
         <span>Выйти</span>
       </button>
     </nav>
@@ -62,18 +59,36 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { useAuthStore } from '../../stores/auth'
+
 import IconResolver from '../ui/IconResolver.vue'
 
-defineProps({
+const props = defineProps({
   theme: {
     type: String,
     default: 'light',
   },
+  isAuthenticated: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-defineEmits(['logout', 'toggle-theme'])
+defineEmits([
+  'logout',
+  'toggle-theme',
+])
 
-const authStore = useAuthStore()
+const brandLink = computed(() => {
+  return props.isAuthenticated ? '/dashboard' : '/login'
+})
+
+const themeIcon = computed(() => {
+  return props.theme === 'dark' ? 'Sun' : 'Moon'
+})
+
+const themeLabel = computed(() => {
+  return props.theme === 'dark' ? 'Светлая' : 'Тёмная'
+})
 </script>

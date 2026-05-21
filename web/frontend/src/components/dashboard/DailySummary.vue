@@ -33,8 +33,8 @@
       </div>
 
       <div class="daily-score-values">
-        <strong>{{ Math.round(dailyTotals.kcal || 0) }}</strong>
-        <span>из {{ dailyGoals.kcal }} ккал</span>
+        <strong>{{ formatCalories(dailyTotals.kcal) }}</strong>
+        <span>из {{ formatCalories(dailyGoals.kcal) }} ккал</span>
       </div>
     </div>
 
@@ -42,7 +42,7 @@
       <div class="goal-card">
         <div class="goal-card-top">
           <span>Калории</span>
-          <strong>{{ Math.round(dailyTotals.kcal || 0) }}</strong>
+          <strong>{{ formatCalories(dailyTotals.kcal) }}</strong>
         </div>
 
         <div class="progress-bar">
@@ -52,13 +52,13 @@
           ></div>
         </div>
 
-        <small>{{ dailyGoals.kcal }} ккал цель</small>
+        <small>{{ formatCalories(dailyGoals.kcal) }} ккал цель</small>
       </div>
 
       <div class="goal-card">
         <div class="goal-card-top">
           <span>Белки</span>
-          <strong>{{ formatNumber(dailyTotals.protein) }} г</strong>
+          <strong>{{ formatMacroPrecise(dailyTotals.protein) }} г</strong>
         </div>
 
         <div class="progress-bar">
@@ -68,13 +68,13 @@
           ></div>
         </div>
 
-        <small>{{ formatNumber(dailyGoals.protein) }} г цель</small>
+        <small>{{ formatMacroPrecise(dailyGoals.protein) }} г цель</small>
       </div>
 
       <div class="goal-card">
         <div class="goal-card-top">
           <span>Жиры</span>
-          <strong>{{ formatNumber(dailyTotals.fat) }} г</strong>
+          <strong>{{ formatMacroPrecise(dailyTotals.fat) }} г</strong>
         </div>
 
         <div class="progress-bar">
@@ -84,13 +84,13 @@
           ></div>
         </div>
 
-        <small>{{ formatNumber(dailyGoals.fat) }} г цель</small>
+        <small>{{ formatMacroPrecise(dailyGoals.fat) }} г цель</small>
       </div>
 
       <div class="goal-card">
         <div class="goal-card-top">
           <span>Углеводы</span>
-          <strong>{{ formatNumber(dailyTotals.carbs) }} г</strong>
+          <strong>{{ formatMacroPrecise(dailyTotals.carbs) }} г</strong>
         </div>
 
         <div class="progress-bar">
@@ -100,7 +100,7 @@
           ></div>
         </div>
 
-        <small>{{ formatNumber(dailyGoals.carbs) }} г цель</small>
+        <small>{{ formatMacroPrecise(dailyGoals.carbs) }} г цель</small>
       </div>
     </div>
 
@@ -120,6 +120,13 @@
 
 <script setup>
 import { computed } from 'vue'
+
+import {
+  formatCalories,
+  formatMacroPrecise,
+  formatPercent,
+} from '../../utils/formatters'
+
 import IconResolver from '../ui/IconResolver.vue'
 
 const props = defineProps({
@@ -142,7 +149,7 @@ defineEmits(['open-profile'])
 
 const dailyGoals = computed(() => {
   return {
-    kcal: Math.round(Number(props.user?.daily_kcal_goal || 0)),
+    kcal: formatCalories(props.user?.daily_kcal_goal),
     protein: Number(props.user?.daily_protein_goal || 0),
     fat: Number(props.user?.daily_fat_goal || 0),
     carbs: Number(props.user?.daily_carbs_goal || 0),
@@ -154,7 +161,9 @@ const caloriesPercent = computed(() => {
     return 0
   }
 
-  return Math.min(Math.round((Number(props.dailyTotals.kcal || 0) / dailyGoals.value.kcal) * 100), 999)
+  const percent = (Number(props.dailyTotals.kcal || 0) / dailyGoals.value.kcal) * 100
+
+  return Math.min(formatPercent(percent), 999)
 })
 
 const scoreTitle = computed(() => {
@@ -258,10 +267,8 @@ function getProgressWidth(value, goal) {
     return 0
   }
 
-  return Math.min(Math.round((Number(value || 0) / Number(goal)) * 100), 100)
-}
+  const progress = (Number(value || 0) / Number(goal)) * 100
 
-function formatNumber(value) {
-  return Number(value || 0).toFixed(1)
+  return Math.min(formatPercent(progress), 100)
 }
 </script>

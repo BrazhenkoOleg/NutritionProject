@@ -1,13 +1,30 @@
 import { defineStore } from 'pinia'
-import api from '../api/axios'
+
+import {
+  fetchCurrentUser,
+  loginUser,
+  logoutUser,
+  registerUser,
+  updateUserProfile,
+} from '../services/authService'
+
+export const AUTH_TOKEN_KEY = 'auth_token'
+
+function getStoredToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY)
+}
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    user: null,
-    token: localStorage.getItem('auth_token'),
-    isLoading: false,
-    isAuthReady: !localStorage.getItem('auth_token'),
-  }),
+  state: () => {
+    const token = getStoredToken()
+
+    return {
+      user: null,
+      token,
+      isLoading: false,
+      isAuthReady: !token,
+    }
+  },
 
   getters: {
     isAuthenticated: (state) => Boolean(state.token),
@@ -18,14 +35,19 @@ export const useAuthStore = defineStore('auth', {
     setToken(token) {
       this.token = token
       this.isAuthReady = true
-      localStorage.setItem('auth_token', token)
+      localStorage.setItem(AUTH_TOKEN_KEY, token)
     },
 
     clearToken() {
       this.token = null
       this.user = null
       this.isAuthReady = true
-      localStorage.removeItem('auth_token')
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+    },
+
+    setAuthData(data) {
+      this.setToken(data.token)
+      this.user = data.user
     },
 
     async fetchUser() {
@@ -38,12 +60,10 @@ export const useAuthStore = defineStore('auth', {
       this.isAuthReady = false
 
       try {
-        const response = await api.get('/user')
-        this.user = response.data.user
+        this.user = await fetchCurrentUser()
 
         return this.user
       } catch (error) {
-        this.user = null
         this.clearToken()
         throw error
       } finally {
@@ -55,15 +75,11 @@ export const useAuthStore = defineStore('auth', {
       this.isLoading = true
 
       try {
-        const response = await api.post('/login', {
-          email: form.email,
-          password: form.password,
-        })
+        const data = await loginUser(form)
 
-        this.setToken(response.data.token)
-        this.user = response.data.user
+        this.setAuthData(data)
 
-        return response.data
+        return data
       } finally {
         this.isLoading = false
       }
@@ -73,17 +89,11 @@ export const useAuthStore = defineStore('auth', {
       this.isLoading = true
 
       try {
-        const response = await api.post('/register', {
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          password_confirmation: form.password_confirmation,
-        })
+        const data = await registerUser(form)
 
-        this.setToken(response.data.token)
-        this.user = response.data.user
+        this.setAuthData(data)
 
-        return response.data
+        return data
       } finally {
         this.isLoading = false
       }
@@ -93,30 +103,32 @@ export const useAuthStore = defineStore('auth', {
       this.isLoading = true
 
       try {
-        const response = await api.put('/profile', form)
+        const data = await updateUserProfile(form)
 
-        this.user = response.data.user
+        this.user = data.user
 
-        return response.data
+        return data
       } finally {
         this.isLoading = false
       }
     },
 
     async logout() {
+      const hadToken = Boolean(this.token)
+
+      this.clearToken()
+
+      if (!hadToken) {
+        return
+      }
+
       try {
-        if (this.token) {
-          await api.post('/logout')
-        }
+        await logoutUser()
       } catch (error) {
         if (error.response?.status !== 401) {
-          console.error('Ошибка выхода:', error)
+          console.warn('Серверный logout не выполнен:', error)
         }
-      } finally {
-        this.user = null
-        this.clearToken()
-        this.isAuthReady = true
       }
-    },
+    }
   },
 })

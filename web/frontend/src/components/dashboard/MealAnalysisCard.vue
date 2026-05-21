@@ -130,22 +130,22 @@
 
       <div class="meal-analysis-summary">
         <div class="summary-main">
-          <strong>{{ Math.round(totals.kcal || 0) }}</strong>
+          <strong>{{ formatCalories(totals.kcal) }}</strong>
           <span>ккал</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(totals.protein) }}</strong>
+          <strong>{{ formatMacro(totals.protein) }}</strong>
           <span>белки, г</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(totals.fat) }}</strong>
+          <strong>{{ formatMacro(totals.fat) }}</strong>
           <span>жиры, г</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(totals.carbs) }}</strong>
+          <strong>{{ formatMacro(totals.carbs) }}</strong>
           <span>углеводы, г</span>
         </div>
       </div>
@@ -174,7 +174,7 @@
             <span>{{ formatWeight(product.weight_g) }} г</span>
           </div>
 
-          <span>{{ Math.round(product.total_kcal || 0) }} ккал</span>
+          <span>{{ formatCalories(product.total_kcal) }} ккал</span>
         </div>
       </div>
 
@@ -190,6 +190,27 @@
 
 <script setup>
 import { computed } from 'vue'
+
+import {
+  PENDING_ANALYSIS_DESCRIPTIONS,
+  PENDING_ANALYSIS_PROGRESS,
+  PENDING_ANALYSIS_STEP_ORDER,
+  PENDING_ANALYSIS_TITLES,
+} from '../../constants/pendingAnalysis'
+
+import { getAnalysisTotals } from '../../utils/nutrition'
+
+import {
+  getAnalysisImageUrl,
+  getPreviewImageUrl,
+} from '../../utils/analysisImages'
+
+import {
+  formatCalories,
+  formatMacro,
+  formatTime,
+  formatWeight,
+} from '../../utils/formatters'
 
 import IconResolver from '../ui/IconResolver.vue'
 import ProductEditor from './ProductEditor.vue'
@@ -229,127 +250,19 @@ const totals = computed(() => {
   return getAnalysisTotals(props.analysis)
 })
 
-function getPreviewImageUrl(analysis) {
-  const imageUrl = String(analysis?.image_url || '').trim()
-
-  if (!imageUrl) {
-    return null
-  }
-
-  if (imageUrl.startsWith('blob:') || imageUrl.startsWith('data:')) {
-    return imageUrl
-  }
-
-  return getAnalysisImageUrl(analysis)
-}
-
-function getAnalysisImageUrl(analysis) {
-  const imageUrl = String(analysis?.image_url || '').trim()
-
-  if (!imageUrl) {
-    return null
-  }
-
-  if (isOldStorageImageUrl(imageUrl)) {
-    return null
-  }
-
-  return imageUrl
-}
-
-function isOldStorageImageUrl(url) {
-  return url.includes('/storage/')
-}
-
-function getAnalysisTotals(analysis) {
-  if (!analysis.products?.length) {
-    return {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    }
-  }
-
-  return analysis.products.reduce(
-    (acc, product) => {
-      acc.kcal += Number(product.total_kcal || 0)
-      acc.protein += Number(product.total_protein || 0)
-      acc.fat += Number(product.total_fat || 0)
-      acc.carbs += Number(product.total_carbs || 0)
-
-      return acc
-    },
-    {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    },
-  )
-}
-
-function formatNumber(value) {
-  return Math.round(Number(value || 0))
-}
-
-function formatWeight(value) {
-  return Math.round(Number(value || 0))
-}
-
-function formatTime(value) {
-  if (!value) {
-    return '--:--'
-  }
-
-  return new Date(value).toLocaleTimeString('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function getPendingTitle(step) {
-  const titles = {
-    preparing: 'Подготовка анализа',
-    compressing: 'Оптимизируем изображение',
-    uploading: 'Загружаем фото',
-    recognizing: 'AI распознаёт продукты',
-    finalizing: 'Считаем КБЖУ',
-    failed: 'Анализ не выполнен',
-  }
-
-  return titles[step] || 'Обрабатываем фото'
+  return PENDING_ANALYSIS_TITLES[step] || 'Обрабатываем фото'
 }
 
 function getPendingDescription(step) {
-  const descriptions = {
-    preparing: 'Создаём запись и готовим изображение.',
-    compressing: 'Уменьшаем размер файла перед отправкой.',
-    uploading: 'Передаём изображение в сервис распознавания.',
-    recognizing: 'Модель определяет продукты на изображении.',
-    finalizing: 'Формируем список продуктов и расчёт питательности.',
-    failed: 'Сервис распознавания временно недоступен. Попробуйте ещё раз.',
-  }
-
-  return descriptions[step] || 'Это займёт немного времени.'
+  return PENDING_ANALYSIS_DESCRIPTIONS[step] || 'Это займёт немного времени.'
 }
 
 function getPendingProgress(step) {
-  const progress = {
-    preparing: 12,
-    compressing: 28,
-    uploading: 48,
-    recognizing: 76,
-    finalizing: 94,
-    failed: 100,
-  }
-
-  return progress[step] || 18
+  return PENDING_ANALYSIS_PROGRESS[step] || 18
 }
 
 function isPendingStepActive(currentStep, step) {
-  const order = ['compressing', 'uploading', 'recognizing', 'finalizing']
-
-  return order.indexOf(step) <= order.indexOf(currentStep)
+  return PENDING_ANALYSIS_STEP_ORDER.indexOf(step) <= PENDING_ANALYSIS_STEP_ORDER.indexOf(currentStep)
 }
 </script>

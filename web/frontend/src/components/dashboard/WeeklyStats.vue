@@ -13,12 +13,12 @@
 
     <div class="weekly-summary-grid">
       <div>
-        <strong>{{ Math.round(weeklyTotals.kcal) }}</strong>
+        <strong>{{ formatCalories(weeklyTotals.kcal) }}</strong>
         <span>ккал за неделю</span>
       </div>
 
       <div>
-        <strong>{{ Math.round(weeklyAverageKcal) }}</strong>
+        <strong>{{ formatCalories(weeklyAverageKcal) }}</strong>
         <span>ккал в среднем</span>
       </div>
 
@@ -48,7 +48,7 @@
         ></div>
 
         <span class="weekly-day-label">{{ day.label }}</span>
-        <strong>{{ Math.round(day.totals.kcal) }}</strong>
+        <strong>{{ formatCalories(day.totals.kcal) }}</strong>
       </button>
     </div>
 
@@ -69,22 +69,22 @@
 
       <div class="selected-day-macros">
         <div>
-          <strong>{{ Math.round(selectedDayTotals.kcal) }}</strong>
+          <strong>{{ formatCalories(selectedDayTotals.kcal) }}</strong>
           <span>ккал</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(selectedDayTotals.protein) }}</strong>
+          <strong>{{ formatMacroPrecise(selectedDayTotals.protein) }}</strong>
           <span>белки, г</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(selectedDayTotals.fat) }}</strong>
+          <strong>{{ formatMacroPrecise(selectedDayTotals.fat) }}</strong>
           <span>жиры, г</span>
         </div>
 
         <div>
-          <strong>{{ formatNumber(selectedDayTotals.carbs) }}</strong>
+          <strong>{{ formatMacroPrecise(selectedDayTotals.carbs) }}</strong>
           <span>углеводы, г</span>
         </div>
       </div>
@@ -98,6 +98,25 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+
+import {
+  formatShortDate,
+  getAnalysisDate,
+  getMonday,
+  getTodayDate,
+  toDateInputValue,
+} from '../../utils/date'
+
+import {
+  createEmptyNutritionTotals,
+  getTotalsFromAnalyses,
+} from '../../utils/nutrition'
+
+import {
+  formatCalories,
+  formatMacroPrecise,
+  formatPercent,
+} from '../../utils/formatters'
 
 const props = defineProps({
   analyses: {
@@ -121,8 +140,9 @@ const weekDays = computed(() => {
     date.setDate(monday.getDate() + index)
 
     const key = toDateInputValue(date)
-    const dayAnalyses = props.analyses.filter((analysis) => getAnalysisDate(analysis) === key)
-    const totals = getTotalsFromAnalyses(dayAnalyses)
+    const dayAnalyses = props.analyses.filter((analysis) => {
+      return getAnalysisDate(analysis) === key
+    })
 
     return {
       date,
@@ -131,7 +151,7 @@ const weekDays = computed(() => {
         weekday: 'short',
       }),
       analyses: dayAnalyses,
-      totals,
+      totals: getTotalsFromAnalyses(dayAnalyses),
     }
   })
 })
@@ -140,15 +160,12 @@ const selectedDay = computed(() => {
   return weekDays.value.find((day) => day.key === selectedDayKey.value) || weekDays.value[0]
 })
 
-const selectedDayAnalyses = computed(() => selectedDay.value?.analyses || [])
+const selectedDayAnalyses = computed(() => {
+  return selectedDay.value?.analyses || []
+})
 
 const selectedDayTotals = computed(() => {
-  return selectedDay.value?.totals || {
-    kcal: 0,
-    protein: 0,
-    fat: 0,
-    carbs: 0,
-  }
+  return selectedDay.value?.totals || createEmptyNutritionTotals()
 })
 
 const weeklyTotals = computed(() => {
@@ -161,12 +178,7 @@ const weeklyTotals = computed(() => {
 
       return acc
     },
-    {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    },
+    createEmptyNutritionTotals(),
   )
 })
 
@@ -195,7 +207,9 @@ const targetCompletion = computed(() => {
     return 0
   }
 
-  return Math.min(Math.round((weeklyTotals.value.kcal / weeklyGoal.value) * 100), 999)
+  const percent = (weeklyTotals.value.kcal / weeklyGoal.value) * 100
+
+  return Math.min(formatPercent(percent), 999)
 })
 
 const selectedDayTitle = computed(() => {
@@ -275,115 +289,11 @@ watch(
   { immediate: true },
 )
 
-function getMonday(date) {
-  const result = new Date(date)
-  const day = result.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-
-  result.setDate(result.getDate() + diff)
-  result.setHours(0, 0, 0, 0)
-
-  return result
-}
-
-function getTodayDate() {
-  return toDateInputValue(new Date())
-}
-
-function toDateInputValue(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
-function getAnalysisDate(analysis) {
-  if (analysis.entry_date) {
-    return String(analysis.entry_date).slice(0, 10)
-  }
-
-  if (!analysis.created_at) {
-    return ''
-  }
-
-  return toDateInputValue(new Date(analysis.created_at))
-}
-
-function getTotalsFromAnalyses(items) {
-  return items.reduce(
-    (acc, analysis) => {
-      const totals = getAnalysisTotals(analysis)
-
-      acc.kcal += totals.kcal
-      acc.protein += totals.protein
-      acc.fat += totals.fat
-      acc.carbs += totals.carbs
-
-      return acc
-    },
-    {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    },
-  )
-}
-
-function getAnalysisTotals(analysis) {
-  if (analysis.totals) {
-    return {
-      kcal: Number(analysis.totals.kcal || 0),
-      protein: Number(analysis.totals.protein || 0),
-      fat: Number(analysis.totals.fat || 0),
-      carbs: Number(analysis.totals.carbs || 0),
-    }
-  }
-
-  if (!analysis.products?.length) {
-    return {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    }
-  }
-
-  return analysis.products.reduce(
-    (acc, product) => {
-      acc.kcal += Number(product.total_kcal || 0)
-      acc.protein += Number(product.total_protein || 0)
-      acc.fat += Number(product.total_fat || 0)
-      acc.carbs += Number(product.total_carbs || 0)
-
-      return acc
-    },
-    {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    },
-  )
-}
-
 function getBarHeight(kcal) {
   if (!maxDayKcal.value) {
     return 8
   }
 
   return Math.max((kcal / maxDayKcal.value) * 100, kcal > 0 ? 10 : 4)
-}
-
-function formatNumber(value) {
-  return Number(value || 0).toFixed(1)
-}
-
-function formatShortDate(date) {
-  return date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-  })
 }
 </script>

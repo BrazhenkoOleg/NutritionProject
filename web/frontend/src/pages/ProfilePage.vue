@@ -2,6 +2,7 @@
   <div class="page">
     <AppHeader
       :theme="theme"
+      :is-authenticated="authStore.isAuthenticated"
       @logout="logout"
       @toggle-theme="toggleTheme"
     />
@@ -25,29 +26,7 @@
           </p>
         </div>
 
-        <div class="profile-preview-card">
-          <div class="preview-ring">
-            <strong>{{ previewTargets.kcal }}</strong>
-            <span>ккал/день</span>
-          </div>
-
-          <div class="preview-macros">
-            <div>
-              <strong>{{ previewTargets.protein }}</strong>
-              <span>белки, г</span>
-            </div>
-
-            <div>
-              <strong>{{ previewTargets.fat }}</strong>
-              <span>жиры, г</span>
-            </div>
-
-            <div>
-              <strong>{{ previewTargets.carbs }}</strong>
-              <span>углеводы, г</span>
-            </div>
-          </div>
-        </div>
+        <ProfilePreview :targets="previewTargets" />
       </section>
 
       <section class="profile-form-card card">
@@ -66,78 +45,11 @@
           </button>
         </div>
 
-        <form
-          class="profile-form"
-          @submit.prevent="submitProfile"
+        <ProfileForm
+          :form="form"
+          @update:form="updateForm"
+          @submit="submitProfile"
         >
-          <div class="profile-grid">
-            <div class="form-group">
-              <label>Пол</label>
-
-              <select v-model="form.gender">
-                <option value="male">Мужской</option>
-                <option value="female">Женский</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label>Возраст</label>
-
-              <input
-                v-model.number="form.age"
-                type="number"
-                min="14"
-                max="100"
-              />
-            </div>
-
-            <div class="form-group">
-              <label>Рост, см</label>
-
-              <input
-                v-model.number="form.height_cm"
-                type="number"
-                min="120"
-                max="230"
-                step="0.1"
-              />
-            </div>
-
-            <div class="form-group">
-              <label>Вес, кг</label>
-
-              <input
-                v-model.number="form.weight_kg"
-                type="number"
-                min="35"
-                max="250"
-                step="0.1"
-              />
-            </div>
-
-            <div class="form-group profile-grid-wide">
-              <label>Активность</label>
-
-              <select v-model="form.activity_level">
-                <option value="sedentary">Минимальная активность</option>
-                <option value="light">Лёгкая активность</option>
-                <option value="moderate">Средняя активность</option>
-                <option value="active">Высокая активность</option>
-                <option value="very_active">Очень высокая активность</option>
-              </select>
-            </div>
-
-            <div class="form-group profile-grid-wide">
-              <label>Цель</label>
-
-              <select v-model="form.goal">
-                <option value="lose">Снижение веса</option>
-                <option value="maintain">Поддержание веса</option>
-                <option value="gain">Набор массы</option>
-              </select>
-            </div>
-          </div>
-
           <div class="profile-current-goals">
             <div>
               <strong>{{ currentGoals.kcal }}</strong>
@@ -204,7 +116,7 @@
               Сбросить
             </button>
           </div>
-        </form>
+        </ProfileForm>
       </section>
     </main>
 
@@ -213,8 +125,19 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+
+import { useTheme } from '../composables/useTheme'
+
+import {
+  calculatePreviewTargets,
+  createProfileFormFromUser,
+  createProfilePayload,
+  getCurrentGoalsFromUser,
+} from '../utils/profileTargets'
+
+import { getFriendlyErrorMessage } from '../utils/errors'
 
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
@@ -222,83 +145,27 @@ import { useToastStore } from '../stores/toast'
 import AppHeader from '../components/layout/AppHeader.vue'
 import AppFooter from '../components/layout/AppFooter.vue'
 import IconResolver from '../components/ui/IconResolver.vue'
+import ProfilePreview from '../components/profile/ProfilePreview.vue'
+import ProfileForm from '../components/profile/ProfileForm.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
-const theme = ref(localStorage.getItem('theme') || 'light')
+const {
+  theme,
+  applyTheme,
+  toggleTheme,
+} = useTheme()
 
-const form = reactive({
-  gender: 'male',
-  age: 22,
-  height_cm: 175,
-  weight_kg: 70,
-  activity_level: 'moderate',
-  goal: 'maintain',
-})
-
-const activityFactors = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  active: 1.725,
-  very_active: 1.9,
-}
+const form = reactive(createProfileFormFromUser(authStore.user))
 
 const currentGoals = computed(() => {
-  const user = authStore.user || {}
-
-  return {
-    kcal: Math.round(Number(user.daily_kcal_goal || 0)),
-    protein: Math.round(Number(user.daily_protein_goal || 0)),
-    fat: Math.round(Number(user.daily_fat_goal || 0)),
-    carbs: Math.round(Number(user.daily_carbs_goal || 0)),
-  }
+  return getCurrentGoalsFromUser(authStore.user)
 })
 
 const previewTargets = computed(() => {
-  const weight = Number(form.weight_kg || 0)
-  const height = Number(form.height_cm || 0)
-  const age = Number(form.age || 0)
-
-  if (!weight || !height || !age) {
-    return {
-      kcal: 0,
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    }
-  }
-
-  let bmr = 10 * weight + 6.25 * height - 5 * age
-
-  if (form.gender === 'male') {
-    bmr += 5
-  } else {
-    bmr -= 161
-  }
-
-  const maintenance = bmr * (activityFactors[form.activity_level] || 1.55)
-
-  let kcal = maintenance
-
-  if (form.goal === 'lose') {
-    kcal *= 0.85
-  } else if (form.goal === 'gain') {
-    kcal *= 1.1
-  }
-
-  const protein = weight * 1.6
-  const fat = (kcal * 0.25) / 9
-  const carbs = Math.max((kcal - protein * 4 - fat * 9) / 4, 0)
-
-  return {
-    kcal: Math.round(kcal),
-    protein: Math.round(protein),
-    fat: Math.round(fat),
-    carbs: Math.round(carbs),
-  }
+  return calculatePreviewTargets(form)
 })
 
 onMounted(async () => {
@@ -316,25 +183,12 @@ onMounted(async () => {
   resetForm()
 })
 
+function updateForm(value) {
+  Object.assign(form, value)
+}
+
 function resetForm() {
-  const user = authStore.user || {}
-
-  form.gender = user.gender || 'male'
-  form.age = Number(user.age || 22)
-  form.height_cm = Number(user.height_cm || 175)
-  form.weight_kg = Number(user.weight_kg || 70)
-  form.activity_level = user.activity_level || 'moderate'
-  form.goal = user.goal || 'maintain'
-}
-
-function applyTheme(value) {
-  theme.value = value
-  localStorage.setItem('theme', value)
-  document.documentElement.setAttribute('data-theme', value)
-}
-
-function toggleTheme() {
-  applyTheme(theme.value === 'light' ? 'dark' : 'light')
+  Object.assign(form, createProfileFormFromUser(authStore.user))
 }
 
 async function logout() {
@@ -344,27 +198,13 @@ async function logout() {
 
 async function submitProfile() {
   try {
-    await authStore.updateProfile({
-      gender: form.gender,
-      age: Number(form.age),
-      height_cm: Number(form.height_cm),
-      weight_kg: Number(form.weight_kg),
-      activity_level: form.activity_level,
-      goal: form.goal,
-    })
+    await authStore.updateProfile(createProfilePayload(form))
 
     toastStore.success('Профиль обновлён.')
     router.push('/dashboard')
   } catch (error) {
     console.error(error)
-
-    if (error.response?.data?.errors) {
-      const firstError = Object.values(error.response.data.errors).flat()[0]
-      toastStore.error(firstError || 'Проверьте заполненные данные.')
-      return
-    }
-
-    toastStore.error('Не удалось обновить профиль. Попробуйте ещё раз.')
+    toastStore.error(getFriendlyErrorMessage(error))
   }
 }
 </script>

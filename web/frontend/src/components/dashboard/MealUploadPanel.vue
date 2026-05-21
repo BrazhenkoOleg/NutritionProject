@@ -30,7 +30,7 @@
         <input
           type="file"
           accept="image/jpeg,image/jpg,image/png,image/webp"
-          @change="$emit('file-change', $event, meal.value)"
+          @change="$emit('file-change', $event)"
         />
 
         <IconResolver
@@ -46,11 +46,11 @@
       <button
         type="button"
         class="analyze-button"
-        :disabled="!uploadFile || isLoading"
-        @click="$emit('analyze', meal.value)"
+        :disabled="isAnalyzeDisabled"
+        @click="$emit('analyze')"
       >
         <IconResolver
-          v-if="isLoading && uploadMealType === meal.value"
+          v-if="isCurrentMealLoading"
           name="Loader2"
           :size="17"
           class="spin-icon"
@@ -65,7 +65,7 @@
         <span>{{ analyzeButtonText }}</span>
       </button>
 
-      <small v-if="isLoading && uploadMealType === meal.value">
+      <small v-if="isCurrentMealLoading">
         ML-сервис обрабатывает изображение
       </small>
     </div>
@@ -74,6 +74,7 @@
 
 <script setup>
 import { computed } from 'vue'
+
 import IconResolver from '../ui/IconResolver.vue'
 
 const props = defineProps({
@@ -99,10 +100,21 @@ const props = defineProps({
   },
 })
 
-defineEmits(['file-change', 'analyze'])
+defineEmits([
+  'file-change',
+  'analyze',
+])
+
+const isCurrentMealLoading = computed(() => {
+  return props.isLoading && props.uploadMealType === props.meal.value
+})
+
+const isAnalyzeDisabled = computed(() => {
+  return !props.uploadFile || props.isLoading
+})
 
 const analyzeButtonText = computed(() => {
-  if (props.isLoading && props.uploadMealType === props.meal.value) {
+  if (isCurrentMealLoading.value) {
     return 'AI анализирует'
   }
 
