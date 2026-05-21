@@ -1,345 +1,207 @@
-# ML Part — Nutrition Project
+<div align="center">
+  <h1>NutriVision ML API</h1>
 
-Модуль машинного обучения для распознавания продуктов питания на изображениях с использованием **YOLOv11**.
+  <p>
+    <strong>FastAPI inference service</strong> для распознавания продуктов и расчёта КБЖУ.
+  </p>
 
-## Описание
-
-Данный модуль является частью проекта **Nutrition Project** и предназначен для:
-
-- подготовки датасета к обучению;
-- разбиения датасета на `train / valid / test`;
-- обучения модели YOLOv11;
-- валидации модели;
-- локальной проверки модели на тестовых изображениях;
-- вывода справочных значений **КБЖУ на 100 г продукта**.
-
-> В текущей версии проекта автоматический расчёт массы продукта по изображению не используется.  
-> Система выводит только справочные значения на 100 грамм продукта.
+  <p>
+    <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-service-009688?logo=fastapi&logoColor=white" />
+    <img alt="ONNX" src="https://img.shields.io/badge/ONNX-Runtime-005CED" />
+    <img alt="YOLOv11" src="https://img.shields.io/badge/model-YOLOv11-111827" />
+    <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" />
+  </p>
+</div>
 
 ---
 
-## Структура папки `ml`
+## 📌 Назначение
+
+`ml_api` — отдельный ML-сервис NutriVision. Он принимает изображение блюда, выполняет inference модели распознавания продуктов и возвращает структурированный результат для Laravel backend.
 
 ```text
-ml/
-├── notebooks/
-│   └── train_yolo11.ipynb
+ml_api/
+├── README.md
+├── api/
+│   └── app.py
 ├── data/
-│   ├── dataset_nutrition/
-│   │   ├── raw/
-│   │   │   ├── images/
-│   │   │   └── labels/
-│   │   ├── train/
-│   │   ├── valid/
-│   │   └── test/
-│   ├── samples/
 │   └── nutrition_products_ru_kbju_100g.json
-├── configs/
-│   └── data.yaml
-├── requirements.txt
-└── README.md
+├── models/
+│   └── .gitkeep
+└── requirements.txt
 ```
 
-### Основные элементы
+---
 
-- `notebooks/train_yolo11.ipynb` — основной ноутбук для запуска всех этапов;
-- `data/dataset_nutrition/raw/` — исходный неразбитый датасет;
-- `data/dataset_nutrition/train|valid|test/` — выборки после разбиения;
-- `data/samples/` — изображения для ручной проверки модели;
-- `data/nutrition_products_ru_kbju_100g.json` — локальная база КБЖУ;
-- `configs/data.yaml` — конфигурация датасета для YOLO;
-- `requirements.txt` — зависимости ML-части.
+## 🎬 Inference-flow
+
+```mermaid
+flowchart TD
+    A[POST /predict или внутренний endpoint анализа] --> B[Валидация изображения]
+    B --> C[Загрузка модели]
+    C --> D[YOLO inference]
+    D --> E[Нормализация классов]
+    E --> F[Поиск продукта в nutrition DB]
+    F --> G[Расчёт КБЖУ]
+    G --> H[JSON response для Laravel API]
+```
 
 ---
 
-## Что потребуется для запуска
-
-Для работы с модулем Вам потребуется:
-
-- Python 3.10 или выше;
-- VS Code;
-- расширения **Python** и **Jupyter** для VS Code;
-- `pip`;
-- желательно наличие NVIDIA GPU для обучения.
-
----
-
-## Установка
-
-### 1. Откройте корень проекта
-
-Перейдите в корневую папку проекта.  
-Пример для Windows:
+## 🚀 Локальный запуск
 
 ```bash
-cd E:\NutritionProject
+cd ml_api
+python -m venv .venv
 ```
 
-### 2. Создайте виртуальное окружение
+### Windows
+
+```powershell
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### macOS / Linux
 
 ```bash
-python -m venv venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Активируйте виртуальное окружение
+После запуска сервис будет доступен по адресу:
+
+```text
+http://localhost:8000
+```
+
+---
+
+## ⚙️ Переменные окружения
+
+Если в проекте используются `.env` параметры, рекомендуется такая структура:
+
+```env
+MODEL_PATH=models/best.onnx
+NUTRITION_DB_PATH=data/nutrition_products_ru_kbju_100g.json
+CONFIDENCE_THRESHOLD=0.25
+```
+
+Фактические имена переменных должны соответствовать `api/app.py`.
+
+---
+
+## 🧠 Модель
+
+ML API рассчитан на использование экспортированной YOLO-модели, например:
+
+```text
+models/best.onnx
+```
+
+Файл модели обычно не хранится в Git, потому что может быть большим. Для репозитория лучше оставить:
+
+```text
+models/.gitkeep
+```
+
+А саму модель передавать отдельно или загружать на сервер при деплое.
+
+---
+
+## 🥗 База продуктов
+
+Файл:
+
+```text
+data/nutrition_products_ru_kbju_100g.json
+```
+
+Обычно содержит соответствие между классом модели и пищевой ценностью продукта на 100 г:
+
+```json
+{
+  "class_name": "apple",
+  "name_ru": "Яблоко",
+  "kcal": 52,
+  "protein": 0.3,
+  "fat": 0.2,
+  "carbs": 14
+}
+```
+
+Backend использует результат ML API, чтобы создать запись анализа и пересчитать КБЖУ с учётом веса порции.
+
+---
+
+## 🔌 Интеграция с Laravel
+
+Laravel backend обращается к ML API во время анализа фото.
+
+Рекомендуемая настройка backend `.env`:
+
+```env
+ML_SERVICE_URL=http://localhost:8000
+```
+
+В production URL должен указывать на размещённый ML-сервис.
+
+---
+
+## 🩺 Health и warm-up
+
+Для production желательно иметь endpoint прогрева, например:
+
+```text
+POST /warmup
+```
+
+Он нужен, чтобы frontend/backend могли заранее разбудить ML-сервис на бесплатном хостинге.
+
+Также полезны endpoints:
+
+```text
+GET /health
+GET /
+```
+
+---
+
+## 🧪 Проверка
+
+Минимальная проверка Python-кода:
 
 ```bash
-venv\Scripts\activate
+python -m compileall api
 ```
 
-После активации в терминале должен появиться префикс:
-
-```text
-(venv)
-```
-
-### 4. Установите зависимости
-
-Из корня проекта выполните:
+Проверка запуска:
 
 ```bash
-pip install -r ml/requirements.txt
+uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Если `pip` требует обновления, выполните:
+Проверка health endpoint:
 
 ```bash
-python -m pip install -U pip
-pip install -r ml/requirements.txt
+curl http://localhost:8000/health
 ```
 
 ---
 
-## Запуск в VS Code
+## 📦 Деплой notes
 
-### 1. Откройте проект
-Откройте в VS Code **корневую папку проекта**, а не только папку `ml`.
-
-### 2. Убедитесь, что установлены расширения
-В VS Code должны быть установлены:
-- **Python**
-- **Jupyter**
-
-### 3. Откройте ноутбук
-Откройте файл:
-
-```text
-ml/notebooks/train_yolo11.ipynb
-```
-
-### 4. Выберите интерпретатор
-Выберите Python из виртуального окружения, например:
-
-```text
-<путь_к_проекту>/venv/Scripts/python.exe
-```
-
-### 5. При необходимости проверьте интерпретатор
-В первой ячейке ноутбука Вы можете выполнить:
-
-```python
-import sys
-print(sys.executable)
-```
-
-Ожидаемый результат: путь к `venv`.
+- Убедитесь, что модель доступна по `MODEL_PATH`.
+- Проверьте размер модели и лимиты хостинга.
+- Для Render/free-tier учитывайте холодный старт.
+- Добавьте warm-up endpoint, если сервис засыпает.
+- Не храните большие веса модели в Git без необходимости.
 
 ---
 
-## Подготовка датасета
-
-Перед запуском ноутбука исходный датасет должен находиться в следующих папках:
-
-```text
-ml/data/dataset_nutrition/raw/images
-ml/data/dataset_nutrition/raw/labels
-```
-
-### Важно
-Пожалуйста, убедитесь, что:
-- каждому изображению соответствует `.txt`-файл разметки;
-- имя изображения и имя `.txt`-файла совпадают.
-
-Пример:
-
-```text
-apple_001.jpg
-apple_001.txt
-```
-
----
-
-## Формат аннотаций
-
-Используется формат **YOLO detection**:
-
-```text
-<class_id> <x_center> <y_center> <width> <height>
-```
-
-Пример:
-
-```text
-0 0.512 0.486 0.324 0.287
-```
-
-Все координаты должны быть нормализованы в диапазоне `[0, 1]`.
-
----
-
-## Конфигурация датасета
-
-Файл конфигурации расположен по пути:
-
-```text
-ml/configs/data.yaml
-```
-
-В нём должны быть указаны:
-
-- путь к `train/images`;
-- путь к `valid/images`;
-- путь к `test/images`;
-- `nc` — количество классов;
-- `names` — список классов.
-
-Если пути в `data.yaml` указаны неверно, обучение и валидация не запустятся.
-
----
-
-## Порядок работы в ноутбуке
-
-После открытия `ml/notebooks/train_yolo11.ipynb` рекомендуется выполнять ячейки **по порядку**.
-
-### 1. Проверка структуры проекта
-На этом этапе ноутбук:
-- определяет корень проекта;
-- проверяет наличие папок `raw/images` и `raw/labels`;
-- проверяет наличие `data.yaml`;
-- проверяет наличие JSON-базы КБЖУ.
-
-### 2. Проверка исходного датасета
-Ноутбук:
-- считает количество изображений;
-- проверяет, что датасет доступен.
-
-### 3. Разбиение датасета
-Выполняется разбиение исходного датасета на:
-- `train`
-- `valid`
-- `test`
-
-Обычно используется пропорция:
-- `train = 80%`
-- `valid = 10%`
-- `test = 10%`
-
-### 4. Обучение модели
-Обучение запускается на базе модели:
-
-```text
-yolo11m.pt
-```
-
-Обычно используются параметры:
-- `epochs = 50` или `100`;
-- `imgsz = 640`;
-- `batch` — в зависимости от объёма видеопамяти;
-- `device = 0` для GPU или `cpu` для CPU.
-
-### 5. Валидация модели
-После обучения рассчитываются:
-- `mAP50`
-- `mAP50-95`
-- `Precision`
-- `Recall`
-
-Дополнительно могут сохраняться графики:
-- confusion matrix;
-- PR curve;
-- F1 curve;
-- precision / recall curves.
-
-### 6. Локальный inference
-Для ручной проверки модели используйте изображения из папки:
-
-```text
-ml/data/samples/
-```
-
-Ноутбук позволит:
-- выбрать изображение;
-- выполнить распознавание;
-- отобразить изображение с bounding boxes;
-- вывести список найденных продуктов;
-- показать КБЖУ на 100 г.
-
----
-
-## Где сохраняются результаты
-
-После обучения результаты сохраняются в папке:
-
-```text
-runs/
-```
-
-Основные файлы:
-- `best.pt` — лучшая модель;
-- `last.pt` — последняя сохранённая модель.
-
----
-
-## Минимальная проверка работоспособности
-
-Если Вы хотите быстро убедиться, что модуль настроен корректно, рекомендуется:
-
-1. подготовить папки:
-   - `ml/data/dataset_nutrition/raw/images`
-   - `ml/data/dataset_nutrition/raw/labels`
-2. открыть `ml/notebooks/train_yolo11.ipynb`;
-3. выполнить:
-   - проверку структуры проекта;
-   - split датасета;
-   - тестовый запуск обучения на 1 эпоху;
-   - inference на одном изображении из `ml/data/samples/`.
-
----
-
-## Возможные проблемы
-
-### Ноутбук не видит датасет
-Проверьте, что данные действительно находятся в:
-
-```text
-ml/data/dataset_nutrition/raw/images
-ml/data/dataset_nutrition/raw/labels
-```
-
-### Ошибка в `data.yaml`
-Проверьте пути к `train`, `valid`, `test`.
-
-### `torch.cuda.is_available()` возвращает `False`
-Проверьте:
-- установлен ли PyTorch с CUDA;
-- выбран ли правильный интерпретатор;
-- доступна ли видеокарта в системе.
-
----
-
-## Кратко
-
-Для запуска модуля Вам нужно:
-
-1. создать и активировать `venv`;
-2. установить зависимости из `ml/requirements.txt`;
-3. положить датасет в `ml/data/dataset_nutrition/raw/`;
-4. открыть `ml/notebooks/train_yolo11.ipynb`;
-5. выполнить ячейки по порядку;
-6. при необходимости добавить тестовые изображения в `ml/data/samples/`.
-
----
-
-## Автор
-
-Браженко Олег
+<div align="center">
+  <strong>NutriVision ML API</strong><br />
+  <span>Food detection service for nutrition intelligence.</span>
+</div>
