@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ImageAnalysisController;
 use App\Http\Controllers\Api\ManualAnalysisController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\NutritionInsightController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', function () {
@@ -33,4 +34,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/analyze', [ImageAnalysisController::class, 'store']);
     Route::post('/analyses/manual', [ManualAnalysisController::class, 'store']);
     Route::put('/analyses/{analysis}/products', [AnalysisProductController::class, 'update']);
+
+    Route::get('/nutrition/weekly-insight', [NutritionInsightController::class, 'show']);
 });

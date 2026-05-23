@@ -832,6 +832,215 @@ img {
   border: 1px solid var(--border);
 }
 
+.weekly-insight-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 90% 8%, rgba(34, 197, 94, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72)),
+    var(--card);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='dark'] .weekly-insight-card {
+  background:
+    radial-gradient(circle at 90% 8%, rgba(34, 197, 94, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72)),
+    var(--card);
+}
+
+.weekly-insight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(180deg, #16a34a, #0ea5e9);
+}
+
+.weekly-insight-card--calorie_deficit::before,
+.weekly-insight-card--protein_deficit::before {
+  background: linear-gradient(180deg, #f59e0b, #ef4444);
+}
+
+.weekly-insight-card--calorie_surplus::before,
+.weekly-insight-card--high_carb::before,
+.weekly-insight-card--high_fat::before {
+  background: linear-gradient(180deg, #f97316, #ef4444);
+}
+
+.weekly-insight-card--balanced::before {
+  background: linear-gradient(180deg, #22c55e, #14b8a6);
+}
+
+.weekly-insight-card--irregular::before,
+.weekly-insight-card--unavailable::before {
+  background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+
+.weekly-insight-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.weekly-insight-title-block {
+  display: grid;
+  gap: 7px;
+}
+
+.weekly-insight-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  border-radius: 999px;
+  color: var(--primary);
+  background: rgba(34, 197, 94, 0.08);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.weekly-insight-title-block strong {
+  color: var(--text);
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.weekly-insight-description {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.weekly-insight-metrics {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weekly-insight-metric {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+[data-theme='dark'] .weekly-insight-metric {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weekly-insight-metric span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.weekly-insight-metric strong {
+  color: var(--text);
+  font-size: 1.02rem;
+}
+
+.weekly-insight-meter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.weekly-insight-meter i {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #16a34a, #0ea5e9);
+}
+
+.weekly-insight-card--calorie_deficit .weekly-insight-meter i,
+.weekly-insight-card--protein_deficit .weekly-insight-meter i {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.weekly-insight-recommendations {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.weekly-insight-subtitle {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.weekly-insight-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+  list-style: none;
+}
+
+.weekly-insight-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.weekly-insight-list li svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--primary);
+}
+
+@media (max-width: 720px) {
+  .weekly-insight-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .weekly-insight-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .weekly-insight-status {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 460px) {
+  .weekly-insight-header {
+    align-items: stretch;
+  }
+
+  .weekly-insight-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Meals */
 
 .meals-grid {

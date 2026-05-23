@@ -112,6 +112,8 @@
         <WeeklyStats
           :analyses="analyses"
           :user="authStore.user"
+          :insight="weeklyInsight"
+          :is-insight-loading="isWeeklyInsightLoading"
         />
 
         <div class="meals-grid">
@@ -226,6 +228,8 @@ import DailySummary from '../components/dashboard/DailySummary.vue'
 import WeeklyStats from '../components/dashboard/WeeklyStats.vue'
 import MealSection from '../components/dashboard/MealSection.vue'
 
+import { useWeeklyInsight } from '../composables/useWeeklyInsight'
+
 const router = useRouter()
 const authStore = useAuthStore()
 const toastStore = useToastStore()
@@ -262,6 +266,15 @@ const {
   getMealTotals,
 } = useDashboardData({
   selectedDate,
+})
+
+const {
+  weeklyInsight,
+  isWeeklyInsightLoading,
+  fetchWeeklyInsight,
+  clearWeeklyInsight,
+} = useWeeklyInsight({
+  toastStore,
 })
 
 const {
@@ -331,9 +344,13 @@ const {
   toastStore,
 })
 
-watch(selectedDate, () => {
+watch(selectedDate, async () => {
   cancelEditProducts()
   cancelManualMealEntry()
+  clearWeeklyInsight()
+
+  await fetchDashboardData()
+  await fetchWeeklyInsight(selectedDate.value)
 })
 
 onMounted(async () => {
@@ -342,6 +359,7 @@ onMounted(async () => {
   try {
     await warmUpServices()
     await fetchDashboardData()
+    await fetchWeeklyInsight(selectedDate.value)
   } finally {
     isInitialLoading.value = false
   }

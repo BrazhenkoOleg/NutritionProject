@@ -33,6 +33,72 @@
       </div>
     </div>
 
+    <div
+      class="weekly-insight-card"
+      :class="`weekly-insight-card--${insightType}`"
+    >
+
+      <div class="weekly-insight-header">
+        <div class="weekly-insight-title-block">
+          <span class="weekly-insight-kicker">
+            <IconResolver
+              :name="isInsightLoading ? 'Loader2' : 'BrainCircuit'"
+              :size="15"
+              :class="{ 'spin-icon': isInsightLoading }"
+            />
+
+            ML-анализ недели
+          </span>
+
+          <strong>{{ insightTitle }}</strong>
+        </div>
+      </div>
+
+      <p class="weekly-insight-description">
+        {{ insightDescription }}
+      </p>
+
+      <div
+        v-if="insightFeatureItems.length"
+        class="weekly-insight-metrics"
+      >
+        <div
+          v-for="feature in insightFeatureItems"
+          :key="feature.label"
+          class="weekly-insight-metric"
+        >
+          <span>{{ feature.label }}</span>
+
+          <strong>{{ feature.value }}</strong>
+
+          <div class="weekly-insight-meter">
+            <i :style="{ width: `${feature.percent}%` }"></i>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="insightRecommendations.length"
+        class="weekly-insight-recommendations"
+      >
+        <span class="weekly-insight-subtitle">Рекомендации</span>
+
+        <ul class="weekly-insight-list">
+          <li
+            v-for="recommendation in insightRecommendations"
+            :key="recommendation"
+          >
+            <IconResolver
+              name="CheckCircle2"
+              :size="15"
+            />
+
+            <span>{{ recommendation }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
     <div class="weekly-chart">
       <button
         v-for="day in weekDays"
@@ -98,6 +164,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import IconResolver from '../ui/IconResolver.vue'
 
 import {
   formatShortDate,
@@ -126,6 +193,14 @@ const props = defineProps({
   user: {
     type: Object,
     default: null,
+  },
+  insight: {
+    type: Object,
+    default: null,
+  },
+  isInsightLoading: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -278,6 +353,61 @@ const recommendationText = computed(() => {
   return 'Калорийность выше дневной цели. Проверьте размер порций и перекусы.'
 })
 
+const insightTitle = computed(() => {
+  if (props.isInsightLoading) {
+    return 'Анализируем рацион...'
+  }
+
+  return props.insight?.title || 'Недостаточно данных для анализа'
+})
+
+const insightDescription = computed(() => {
+  if (props.isInsightLoading) {
+    return 'Система анализирует недельные показатели КБЖУ и подготавливает рекомендацию.'
+  }
+
+  return props.insight?.description || 'Добавьте больше записей в дневник питания, чтобы получить рекомендацию по недельному рациону.'
+})
+
+const insightRecommendations = computed(() => {
+  return props.insight?.recommendations || []
+})
+
+const insightType = computed(() => {
+  return props.insight?.type || 'empty'
+})
+
+const insightFeatureItems = computed(() => {
+  const features = props.insight?.features
+
+  if (!features || props.isInsightLoading) {
+    return []
+  }
+
+  return [
+    {
+      label: 'Калории',
+      value: formatInsightPercent(features.avg_kcal_ratio),
+      percent: toInsightProgressPercent(features.avg_kcal_ratio),
+    },
+    {
+      label: 'Белки',
+      value: formatInsightPercent(features.avg_protein_ratio),
+      percent: toInsightProgressPercent(features.avg_protein_ratio),
+    },
+    {
+      label: 'Жиры',
+      value: formatInsightPercent(features.avg_fat_ratio),
+      percent: toInsightProgressPercent(features.avg_fat_ratio),
+    },
+    {
+      label: 'Углеводы',
+      value: formatInsightPercent(features.avg_carbs_ratio),
+      percent: toInsightProgressPercent(features.avg_carbs_ratio),
+    },
+  ]
+})
+
 watch(
   () => weekDays.value.map((day) => day.key).join(','),
   () => {
@@ -295,5 +425,13 @@ function getBarHeight(kcal) {
   }
 
   return Math.max((kcal / maxDayKcal.value) * 100, kcal > 0 ? 10 : 4)
+}
+
+function formatInsightPercent(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`
+}
+
+function toInsightProgressPercent(value) {
+  return Math.min(Math.round(Number(value || 0) * 100), 130)
 }
 </script>

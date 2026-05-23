@@ -13,6 +13,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
 
+from app.decision_support.nutrition_classifier import NutritionClassifier
+from app.decision_support.schemas import WeeklyNutritionRequest, WeeklyNutritionResponse
+
 load_dotenv()
 
 ML_ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +71,8 @@ app = FastAPI(
     description="FastAPI service for food detection using YOLO ONNX Runtime",
     version="3.0.0",
 )
+
+nutrition_classifier = NutritionClassifier()
 
 app.add_middleware(
     CORSMiddleware,
@@ -507,3 +512,7 @@ async def predict(image: UploadFile = File(...)):
             del products
 
             gc.collect()
+
+@app.post("/nutrition/weekly-analysis", response_model=WeeklyNutritionResponse)
+def analyze_weekly_nutrition(payload: WeeklyNutritionRequest):
+    return nutrition_classifier.predict(payload)
