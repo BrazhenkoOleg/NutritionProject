@@ -15,14 +15,15 @@
       />
 
       <div class="form-group">
-        <label>Email</label>
+        <label>Электронная почта</label>
 
         <input
           v-model.trim="form.email"
           type="email"
           autocomplete="email"
-          placeholder="you@example.com"
+          placeholder="Введите email"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 
@@ -35,6 +36,7 @@
           autocomplete="current-password"
           placeholder="Введите пароль"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 

@@ -23,18 +23,20 @@
           autocomplete="name"
           placeholder="Ваше имя"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 
       <div class="form-group">
-        <label>Email</label>
+        <label>Электронная почта</label>
 
         <input
           v-model.trim="form.email"
           type="email"
           autocomplete="email"
-          placeholder="you@example.com"
+          placeholder="Введите email"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 
@@ -47,6 +49,7 @@
           autocomplete="new-password"
           placeholder="Минимум 6 символов"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 
@@ -59,6 +62,7 @@
           autocomplete="new-password"
           placeholder="Повторите пароль"
           required
+          :disabled="authStore.isLoading"
         />
       </div>
 
