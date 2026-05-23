@@ -23,10 +23,12 @@ export function getAnalysisTotals(analysis) {
 
   return analysis.products.reduce(
     (acc, product) => {
-      acc.kcal += Number(product.total_kcal || 0)
-      acc.protein += Number(product.total_protein || 0)
-      acc.fat += Number(product.total_fat || 0)
-      acc.carbs += Number(product.total_carbs || 0)
+      const totals = getAnalysisProductTotals(product)
+
+      acc.kcal += totals.kcal
+      acc.protein += totals.protein
+      acc.fat += totals.fat
+      acc.carbs += totals.carbs
 
       return acc
     },
@@ -48,4 +50,50 @@ export function getTotalsFromAnalyses(analyses) {
     },
     createEmptyNutritionTotals(),
   )
+}
+
+export function getAnalysisProductTotals(product) {
+  const weight = Number(product.weight_g || 0)
+
+  if (hasPer100gSnapshot(product) && weight > 0) {
+    return {
+      kcal: calculateTotal(product.kcal_per_100g, weight),
+      protein: calculateTotal(product.protein_per_100g, weight),
+      fat: calculateTotal(product.fat_per_100g, weight),
+      carbs: calculateTotal(product.carbs_per_100g, weight),
+    }
+  }
+
+  return {
+    kcal: Number(product.total_kcal || 0),
+    protein: Number(product.total_protein || 0),
+    fat: Number(product.total_fat || 0),
+    carbs: Number(product.total_carbs || 0),
+  }
+}
+
+export function getAnalysisProductPer100g(product) {
+  return {
+    kcal: Number(product.kcal_per_100g || 0),
+    protein: Number(product.protein_per_100g || 0),
+    fat: Number(product.fat_per_100g || 0),
+    carbs: Number(product.carbs_per_100g || 0),
+  }
+}
+
+function hasPer100gSnapshot(product) {
+  return (
+    product.kcal_per_100g !== null &&
+    product.kcal_per_100g !== undefined &&
+    product.protein_per_100g !== null &&
+    product.protein_per_100g !== undefined &&
+    product.fat_per_100g !== null &&
+    product.fat_per_100g !== undefined &&
+    product.carbs_per_100g !== null &&
+    product.carbs_per_100g !== undefined
+  )
+}
+
+function calculateTotal(valuePer100g, weight) {
+  return Number(valuePer100g || 0) * weight / 100
 }

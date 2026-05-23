@@ -38,20 +38,14 @@ class AnalysisProductService
                 continue;
             }
 
-            $weight = (float) $item['weight_g'];
-            $factor = $weight / 100;
-
-            $analysis->analysisProducts()->create([
-                'product_id' => $product->id,
-                'class_name' => $product->class_name,
-                'weight_g' => $weight,
-                'detected_count' => $item['detected_count'],
-                'max_confidence' => $item['max_confidence'],
-                'total_kcal' => round($this->nutrient($product, ['kcal', 'calories', 'kcal_100g', 'kcal_per_100g']) * $factor, 2),
-                'total_protein' => round($this->nutrient($product, ['protein', 'protein_100g', 'protein_per_100g']) * $factor, 2),
-                'total_fat' => round($this->nutrient($product, ['fat', 'fat_100g', 'fat_per_100g']) * $factor, 2),
-                'total_carbs' => round($this->nutrient($product, ['carbs', 'carbohydrates', 'carbs_100g', 'carbs_per_100g']) * $factor, 2),
-            ]);
+            $analysis->analysisProducts()->create(
+                $this->makeAnalysisProductPayload(
+                    product: $product,
+                    weight: (float) $item['weight_g'],
+                    detectedCount: (int) $item['detected_count'],
+                    maxConfidence: (float) $item['max_confidence'],
+                )
+            );
         }
 
         $analysis->update([
@@ -59,10 +53,67 @@ class AnalysisProductService
         ]);
     }
 
+    private function makeAnalysisProductPayload(
+        Product $product,
+        float $weight,
+        int $detectedCount = 1,
+        ?float $maxConfidence = null,
+    ): array {
+        $kcalPer100g = $this->nutrient($product, [
+            'kcal_per_100g',
+            'kcal_100g',
+            'kcal',
+            'calories',
+        ]);
+
+        $proteinPer100g = $this->nutrient($product, [
+            'protein_per_100g',
+            'protein_100g',
+            'protein',
+        ]);
+
+        $fatPer100g = $this->nutrient($product, [
+            'fat_per_100g',
+            'fat_100g',
+            'fat',
+        ]);
+
+        $carbsPer100g = $this->nutrient($product, [
+            'carbs_per_100g',
+            'carbs_100g',
+            'carbohydrates',
+            'carbs',
+        ]);
+
+        return [
+            'product_id' => $product->id,
+
+            'weight_g' => round($weight, 1),
+
+            'detected_count' => $detectedCount,
+            'max_confidence' => $maxConfidence,
+
+            'kcal_per_100g' => round($kcalPer100g, 2),
+            'protein_per_100g' => round($proteinPer100g, 2),
+            'fat_per_100g' => round($fatPer100g, 2),
+            'carbs_per_100g' => round($carbsPer100g, 2),
+
+            'total_kcal' => $this->calculateTotal($kcalPer100g, $weight),
+            'total_protein' => $this->calculateTotal($proteinPer100g, $weight),
+            'total_fat' => $this->calculateTotal($fatPer100g, $weight),
+            'total_carbs' => $this->calculateTotal($carbsPer100g, $weight),
+        ];
+    }
+
+    private function calculateTotal(float $valuePer100g, float $weight): float
+    {
+        return round($valuePer100g * $weight / 100, 2);
+    }
+
     private function nutrient(Product $product, array $fields): float
     {
         foreach ($fields as $field) {
-            if (isset($product->{$field})) {
+            if ($product->{$field} !== null) {
                 return (float) $product->{$field};
             }
         }

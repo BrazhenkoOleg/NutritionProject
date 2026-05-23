@@ -42,15 +42,12 @@ class AnalysisService
                 'user_id' => $user->id,
                 'meal_type' => $mealType,
                 'entry_date' => $entryDate,
-                'image_path' => null,
                 'image_url' => $cloudinaryUpload['url'],
                 'image_public_id' => $cloudinaryUpload['public_id'],
                 'status' => AnalysisStatus::Analyzed->value,
                 'detections_count' => (int) ($mlData['detections_count'] ?? 0),
                 'products_count' => 0,
                 'detections' => $mlData['detections'] ?? [],
-                'products' => null,
-                'note' => null,
             ]);
 
             $productsForSync = $detectedProducts
@@ -80,15 +77,12 @@ class AnalysisService
             'user_id' => $user->id,
             'meal_type' => $mealType,
             'entry_date' => $entryDate,
-            'image_path' => null,
             'image_url' => null,
             'image_public_id' => null,
             'status' => AnalysisStatus::Manual->value,
             'detections_count' => 0,
             'products_count' => 0,
             'detections' => [],
-            'products' => null,
-            'note' => null,
         ]);
 
         $this->analysisProductService->syncProducts($analysis, $products);

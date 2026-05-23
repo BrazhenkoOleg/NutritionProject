@@ -165,16 +165,16 @@
         class="analysis-products-list"
       >
         <div
-          v-for="product in analysis.products"
-          :key="`${analysis.id}-${product.class_name}`"
+          v-for="(product, index) in analysis.products"
+          :key="getProductKey(product, index)"
           class="analysis-product-row"
         >
           <div>
-            <strong>{{ product.name_ru || product.class_name }}</strong>
+            <strong>{{ getProductName(product) }}</strong>
             <span>{{ formatWeight(product.weight_g) }} г</span>
           </div>
 
-          <span>{{ formatCalories(product.total_kcal) }} ккал</span>
+          <span>{{ formatCalories(getProductTotals(product).kcal) }} ккал</span>
         </div>
       </div>
 
@@ -198,7 +198,10 @@ import {
   PENDING_ANALYSIS_TITLES,
 } from '../../constants/pendingAnalysis'
 
-import { getAnalysisTotals } from '../../utils/nutrition'
+import {
+  getAnalysisProductTotals,
+  getAnalysisTotals,
+} from '../../utils/nutrition'
 
 import {
   getAnalysisImageUrl,
@@ -249,6 +252,18 @@ defineEmits([
 const totals = computed(() => {
   return getAnalysisTotals(props.analysis)
 })
+
+function getProductTotals(product) {
+  return getAnalysisProductTotals(product)
+}
+
+function getProductKey(product, index) {
+  return product.id || `${props.analysis.id}-${product.product_id || 'product'}-${index}`
+}
+
+function getProductName(product) {
+  return product.name_ru || product.product?.name_ru || product.class_name || product.product?.class_name || 'Продукт'
+}
 
 function getPendingTitle(step) {
   return PENDING_ANALYSIS_TITLES[step] || 'Обрабатываем фото'

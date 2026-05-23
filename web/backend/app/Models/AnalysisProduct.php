@@ -30,6 +30,7 @@ class AnalysisProduct extends Model
     protected $casts = [
         'weight_g' => 'decimal:1',
 
+        'detected_count' => 'integer',
         'max_confidence' => 'decimal:4',
 
         'kcal_per_100g' => 'decimal:2',
