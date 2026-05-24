@@ -135,14 +135,14 @@
             :all-products="allProducts"
             @toggle="toggleMeal"
             @file-change="handleFileChange"
-            @analyze="analyzeMealImage"
+            @analyze="handleAnalyzeMealImage"
             @start-manual-entry="startManualMealEntry"
             @cancel-manual-entry="cancelManualMealEntry"
-            @save-manual-entry="saveManualMealEntry"
+            @save-manual-entry="handleSaveManualMealEntry"
             @edit-products="startEditProducts"
             @delete-analysis="askDeleteAnalysis"
             @cancel-edit="cancelEditProducts"
-            @save-edit="saveEditedProducts"
+            @save-edit="handleSaveEditedProducts"
             @update:editable-products="editableProducts = $event"
             @update:manual-products="manualProducts = $event"
           />
@@ -188,7 +188,7 @@
             type="button"
             class="danger-button"
             :disabled="isDeletingAnalysis"
-            @click="confirmDeleteAnalysis"
+            @click="handleConfirmDeleteAnalysis"
           >
             {{ isDeletingAnalysis ? 'Удаляем...' : 'Удалить запись' }}
           </button>
@@ -283,7 +283,7 @@ const {
   isSavingProducts,
   startEditProducts,
   cancelEditProducts,
-  saveEditedProducts,
+  saveEditedProducts: saveEditedProductsBase,
 } = useProductEditing({
   allProducts,
   upsertAnalysis,
@@ -295,7 +295,7 @@ const {
   isDeletingAnalysis,
   askDeleteAnalysis,
   closeDeleteModal,
-  confirmDeleteAnalysis,
+  confirmDeleteAnalysis: confirmDeleteAnalysisBase,
 } = useAnalysisDelete({
   removeAnalysisFromList,
   editingAnalysisId,
@@ -309,7 +309,7 @@ const {
   mealUploadFiles,
   mealPreviewUrls,
   handleFileChange,
-  analyzeMealImage,
+  analyzeMealImage: analyzeMealImageBase,
   warmUpMlOnly,
 } = useImageAnalysis({
   selectedDate,
@@ -335,7 +335,7 @@ const {
   isSavingManualEntry,
   startManualMealEntry,
   cancelManualMealEntry,
-  saveManualMealEntry,
+  saveManualMealEntry: saveManualMealEntryBase,
 } = useManualEntry({
   selectedDate,
   upsertAnalysis,
@@ -349,8 +349,7 @@ watch(selectedDate, async () => {
   cancelManualMealEntry()
   clearWeeklyInsight()
 
-  await fetchDashboardData()
-  await fetchWeeklyInsight(selectedDate.value)
+  await refreshDashboard()
 })
 
 onMounted(async () => {
@@ -358,8 +357,7 @@ onMounted(async () => {
 
   try {
     await warmUpServices()
-    await fetchDashboardData()
-    await fetchWeeklyInsight(selectedDate.value)
+    await refreshDashboard()
   } finally {
     isInitialLoading.value = false
   }
@@ -375,5 +373,49 @@ function logout() {
   if (router.currentRoute.value.path !== '/login') {
     router.push('/login')
   }
+}
+
+async function refreshDashboard({
+  refreshData = true,
+  refreshInsight = true,
+} = {}) {
+  const tasks = []
+
+  if (refreshData) {
+    tasks.push(fetchDashboardData())
+  }
+
+  if (refreshInsight) {
+    tasks.push(fetchWeeklyInsight(selectedDate.value))
+  }
+
+  await Promise.all(tasks)
+}
+
+async function handleAnalyzeMealImage(mealType) {
+  await analyzeMealImageBase(mealType)
+  await refreshWeeklyInsightOnly()
+}
+
+async function handleSaveManualMealEntry(mealType) {
+  await saveManualMealEntryBase(mealType)
+  await refreshWeeklyInsightOnly()
+}
+
+async function handleSaveEditedProducts() {
+  await saveEditedProductsBase()
+  await refreshWeeklyInsightOnly()
+}
+
+async function handleConfirmDeleteAnalysis() {
+  await confirmDeleteAnalysisBase()
+  await refreshWeeklyInsightOnly()
+}
+
+async function refreshWeeklyInsightOnly() {
+  await refreshDashboard({
+    refreshData: false,
+    refreshInsight: true,
+  })
 }
 </script>
